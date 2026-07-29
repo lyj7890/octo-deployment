@@ -195,6 +195,7 @@ services:
       OCTO_SUMMARY_DB_PASSWORD: ${OCTO_SUMMARY_DB_PASSWORD:-summary}
       OCTO_SUMMARY_READER_PASSWORD: ${OCTO_SUMMARY_READER_PASSWORD:-summary_reader}
       SPEECH_DB_PASSWORD: ${SPEECH_DB_PASSWORD:-}
+      OCTO_DOCS_DB_PASSWORD: ${OCTO_DOCS_DB_PASSWORD:-}
     # Backing service: bound to loopback by default so a missed-config moment
     # does not expose MySQL with the placeholder root password to the public
     # internet. Override OCTO_MYSQL_BIND to 0.0.0.0 only when you understand
@@ -343,6 +344,7 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
       OCTO_MINIO_APP_USER: ${OCTO_MINIO_APP_USER:-octo-app}
       OCTO_MINIO_APP_PASSWORD: ${OCTO_MINIO_APP_PASSWORD}
+      OCTO_DOCS_DB_PASSWORD: ${OCTO_DOCS_DB_PASSWORD:-}
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
@@ -420,9 +422,13 @@ services:
         # CreateBucket privileges (the policy below intentionally omits
         # bucket admin actions). Each `mb` is `--ignore-existing` so the
         # service stays idempotent.
-        for b in file chat moment sticker report chatbg common download group avatar; do
+        for b in file chat moment sticker report chatbg common download group avatar octo-docs-attachments; do
           mc mb --ignore-existing "local/$$b" >/dev/null
         done
+
+        # Docs attachment bucket is created alongside the core bucket list
+        # below (no docs DB-password gate needed — the bucket is free to
+        # pre-create and the docs service is profile-gated).
 
         # OCTO IM semantics: chat/file/moment/sticker/chatbg/common/avatar
         # are content buckets shared among group members. Anonymous GET
@@ -750,6 +756,9 @@ services:
       # deployment boots cleanly without these vars set.
       SPEECH_SERVICE_URL: ${SPEECH_SERVICE_URL:-}
       SPEECH_API_KEY:     ${SPEECH_API_KEY:-}
+      # octo-docs-backend notification token wiring. Empty by default so a
+      # non-docs deployment boots cleanly without this var set.
+      OCTO_DOCS_NOTIFY_TOKEN: ${OCTO_DOCS_NOTIFY_TOKEN:-}
       # Where the reader finds OpenSearch + which read alias it queries. Only
       # consulted when OCTO_SEARCH_BACKEND=es; harmless (unread) when disabled.
       # The reader queries the ALIAS, never the physical index — the alias is
@@ -1155,6 +1164,139 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8781/healthz || exit 1"]
       interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - octo-net
+
+  # ===========================================================================
+  # Docs infrastructure (collaborative document backend) — STRICTLY ADDITIVE
+  # ===========================================================================
+  # docs-preflight / octo-docs-backend: Hocuspocus + Yjs real-time collaborative document sync.
+  # Gated behind `profiles: ["docs"]` — a vanilla `docker compose up -d` starts
+  # nothing. Opt in with `COMPOSE_PROFILES=docs` (combine with other profiles:
+  # `COMPOSE_PROFILES=summary,docs`).
+  #
+  # Two listeners in one process:
+  #   REST API   :3000  — docs CRUD, collab-token issuance, attachments
+  #   Hocuspocus :1234  — real-time Yjs WebSocket sync
+  # Both are reverse-proxied through nginx (/docs-api/ and /docs-ws/) so only
+  # the existing OCTO_HTTP_PORT stays open; no new host ports are required.
+  #
+  # ISOLATION GUARANTEES:
+  #   - No core service definition is touched beyond one optional env var on
+  #     octo-server (OCTO_DOCS_NOTIFY_TOKEN), empty by default.
+  #   - All required docs secrets/URLs are enforced by docs-preflight, which is
+  #     itself gated by the `docs` profile, so non-docs deployments never fail
+  #     preflight on missing docs variables.
+  #   - Reuses the existing octo-net network, MySQL instance (octo_docs database
+  #     created by init-extra-dbs.sh), and MinIO instance.
+  # ---------------------------------------------------------------------------
+  docs-preflight:
+    image: ${OCTO_PREFLIGHT_IMAGE:-busybox:1.36}
+    restart: "no"
+    profiles: ["docs"]
+    environment:
+      OCTO_DOCS_DB_PASSWORD: ${OCTO_DOCS_DB_PASSWORD:-}
+      OCTO_DOCS_COLLAB_SECRET: ${OCTO_DOCS_COLLAB_SECRET:-}
+      OCTO_DOCS_ATTACHMENT_SECRET: ${OCTO_DOCS_ATTACHMENT_SECRET:-}
+      OCTO_DOCS_COLLAB_WS_URL: ${OCTO_DOCS_COLLAB_WS_URL:-}
+      OCTO_DOCS_WEB_ORIGIN: ${OCTO_DOCS_WEB_ORIGIN:-}
+      OCTO_DOCS_S3_ENDPOINT: ${OCTO_DOCS_S3_ENDPOINT:-}
+      OCTO_DOCS_CORS_ORIGINS: ${OCTO_DOCS_CORS_ORIGINS:-}
+      OCTO_DOCS_NOTIFY_TOKEN: ${OCTO_DOCS_NOTIFY_TOKEN:-}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        check_required() {
+          name=$$1
+          raw=$$(eval "printf %s \"\$$$$name\"")
+          if [ -z "$$raw" ]; then
+            echo "[docs-preflight] FATAL: $$name is empty — set it in .env before enabling the docs profile" >&2
+            exit 1
+          fi
+        }
+        check_hex_secret() {
+          name=$$1
+          raw=$$(eval "printf %s \"\$$$$name\"")
+          check_required "$$name"
+          if [ "$${#raw}" -lt 32 ]; then
+            echo "[docs-preflight] FATAL: $$name must be at least 32 characters (openssl rand -hex 32)" >&2
+            exit 1
+          fi
+          lc=$$(printf %s "$$raw" | tr 'A-Z' 'a-z')
+          case "$$lc" in
+            change_me_*|chg_me*)
+              echo "[docs-preflight] FATAL: $$name is still a CHANGE_ME / CHG_ME placeholder" >&2
+              exit 1
+              ;;
+          esac
+        }
+        check_required OCTO_DOCS_DB_PASSWORD
+        check_hex_secret OCTO_DOCS_COLLAB_SECRET
+        check_hex_secret OCTO_DOCS_ATTACHMENT_SECRET
+        check_required OCTO_DOCS_COLLAB_WS_URL
+        check_required OCTO_DOCS_WEB_ORIGIN
+        check_required OCTO_DOCS_S3_ENDPOINT
+        check_required OCTO_DOCS_CORS_ORIGINS
+        echo "[docs-preflight] docs settings look valid"
+    networks:
+      - octo-net
+
+  octo-docs-backend:
+    image: ${OCTO_DOCS_IMAGE:-mininglamposs/octo-docs-backend:latest}
+    restart: unless-stopped
+    profiles: ["docs"]
+    depends_on:
+      docs-preflight:
+        condition: service_completed_successfully
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: production
+      HTTP_PORT: "3000"
+      HOCUSPOCUS_PORT: "1234"
+      TRUST_PROXY: "1"
+      # MySQL
+      MYSQL_HOST: mysql
+      MYSQL_PORT: "3306"
+      MYSQL_USER: docs
+      MYSQL_PASSWORD: ${OCTO_DOCS_DB_PASSWORD:-}
+      MYSQL_DATABASE: octo_docs
+      # Redis (reuse existing instance)
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PREFIX: octo-docs
+      # Collab token (short-lived JWT for Hocuspocus WS handshake)
+      COLLAB_TOKEN_SECRET: ${OCTO_DOCS_COLLAB_SECRET:-}
+      # Browser-reachable WS URL returned to clients. nginx proxies /docs-ws/ →
+      # :1234, so the public URL is ws:// (or wss://) on the same host+port as
+      # the REST API — no extra open port required.
+      COLLAB_TOKEN_PUBLIC_WS_URL: "${OCTO_DOCS_COLLAB_WS_URL:-}"
+      # Identity — delegate auth to octo-server
+      OCTO_IDENTITY_MODE: http
+      OCTO_SERVER_BASE_URL: http://octo-server:8090
+      OCTO_WEB_ORIGIN: "${OCTO_DOCS_WEB_ORIGIN:-}"
+      # Attachments via MinIO (s3 driver)
+      ATTACHMENT_DRIVER: s3
+      ATTACHMENT_BUCKET: octo-docs-attachments
+      ATTACHMENT_S3_ENDPOINT: "${OCTO_DOCS_S3_ENDPOINT:-}"
+      ATTACHMENT_S3_ACCESS_KEY: ${OCTO_MINIO_APP_USER:-octo-app}
+      ATTACHMENT_S3_SECRET_KEY: ${OCTO_MINIO_APP_PASSWORD:-}
+      ATTACHMENT_S3_FORCE_PATH_STYLE: "true"
+      ATTACHMENT_SIGNING_SECRET: ${OCTO_DOCS_ATTACHMENT_SECRET:-}
+      # CORS — allow requests from the web frontend
+      CORS_ALLOWED_ORIGINS: "${OCTO_DOCS_CORS_ORIGINS:-}"
+      TZ: ${TZ:-UTC}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:3000/healthz || exit 1"]
+      interval: 15s
       timeout: 5s
       retries: 3
       start_period: 30s
