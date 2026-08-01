@@ -1,7 +1,7 @@
 # OCTO · Docker Compose deployment
 
 A self-contained one-shot deployment of the full OCTO stack — server,
-admin console, web UI, matter, smart-summary, WuKongIM, MySQL, Redis,
+admin console, web UI, matter, smart-summary, marketplace, WuKongIM, MySQL, Redis,
 MinIO, and an nginx reverse proxy — wired together by a single
 `docker-compose.yaml`.
 
@@ -203,7 +203,8 @@ Or, on a fresh host where you want the same three steps without
 prompts, do step 1 non-interactively and chain into the start-only
 `--up` (R6 / GH#33, R8 / GH#43). `--up` brings the stack up itself,
 blocking until every long-running service reports `(healthy)` and
-every one-shot init job (`preflight`, `minio-init`) exits 0. On
+every one-shot init job (`preflight`, `minio-init`, `market-preflight`,
+`search-kafka-init`) exits 0. On
 timeout or startup failure it prints `compose ps`, lists the
 specific failing service names, and emits a `logs <svc>` hint for
 each before exiting 1. `--up` never rewrites/regenerates the secrets
@@ -499,8 +500,8 @@ short of octo-server's length check, `MINIO_ROOT_PASSWORD` is 7 chars
 `CHANGE_ME_*` / `CHG_ME*` placeholder, when any service-account
 password contains characters outside `[A-Za-z0-9._-]`, or when
 `OCTO_MATTER_DB_PASSWORD` / `OCTO_SUMMARY_DB_PASSWORD` /
-`OCTO_SUMMARY_READER_PASSWORD` is left at the literal-string defaults
-(`matter` / `summary` / `summary_reader`). Together these checks mean
+`OCTO_SUMMARY_READER_PASSWORD` / `OCTO_MARKETPLACE_DB_PASSWORD` is left at the literal-string defaults
+(`matter` / `summary` / `summary_reader` / `marketplace`). Together these checks mean
 the OOTB stack cannot reach `(healthy)` with any of the placeholder
 values still in place.
 
@@ -512,6 +513,7 @@ values still in place.
 | `OCTO_MATTER_DB_PASSWORD` | MySQL service account `matter` (full DML on `octo_matter`). `init-extra-dbs.sh` refuses the literal default `matter` so the OOTB stack cannot bring MySQL up with a guess-once credential. | `openssl rand -hex 16` |
 | `OCTO_SUMMARY_DB_PASSWORD` | MySQL service account `summary` (full DML on `octo_summary`). `init-extra-dbs.sh` refuses the literal default `summary`. | `openssl rand -hex 16` |
 | `OCTO_SUMMARY_READER_PASSWORD` | MySQL service account `summary_reader` (`SELECT` on the OCTO IM schema — see the `GRANT` block in `init-extra-dbs.sh`). `init-extra-dbs.sh` refuses the literal default `summary_reader`. | `openssl rand -hex 16` |
+| `OCTO_MARKETPLACE_DB_PASSWORD` | MySQL service account `marketplace` (full DML on `octo_marketplace`). `init-extra-dbs.sh` refuses the literal default `marketplace`. `setup.sh` generates this automatically. | `openssl rand -hex 16` |
 | `OCTO_MASTER_KEY` | 32-byte server master key | `openssl rand -hex 16` |
 | `OCTO_NOTIFY_INTERNAL_TOKEN` | HMAC secret octo-server ↔ matter / smart-summary share. The `preflight` one-shot service refuses any `CHANGE_ME_*` / `CHG_ME*` casing. | `openssl rand -hex 32` |
 | `OCTO_WUKONGIM_MANAGER_TOKEN` | WuKongIM admin token. Bound on WuKongIM via `WK_MANAGERTOKEN` (Viper auto-binds to YAML `managerToken`) and on octo-server via `TS_WUKONGIM_MANAGERTOKEN`. Leaving it empty makes WuKongIM's manager API reachable AND USABLE without auth — `preflight` refuses any `CHANGE_ME_*` / `CHG_ME*` casing as well. | `openssl rand -hex 32` |
@@ -527,8 +529,8 @@ Everything else has sane defaults documented inline in
 (`23306`), Redis (`26379`), MinIO API (`29000`) and the MinIO console
 (`29001`) are **only reachable from the host loopback**. The
 nginx-proxied paths (`/`, `/api/`, `/v1/`, `/admin/`, `/matter/`,
-`/summary/`, `/ws`, and the bucket-name routes
-`/file|chat|moment|sticker|report|chatbg|common|download|group|avatar`)
+`/summary/`, `/market/`, `/ws`, and the bucket-name routes
+`/file|chat|moment|sticker|report|chatbg|common|download|group|avatar|octo-docs-attachments|marketplace`)
 remain public — note that `/minio-console/` is **not** in that list
 (see "Network surface" below).
 
@@ -1179,6 +1181,37 @@ above for why a ufw rule alone is not enough).
 > belongs.
 
 ---
+
+### Marketplace (skill / MCP / bot catalog)
+
+The marketplace service (`octo-marketplace`) starts by default — no opt-in
+profile required. It is reached through nginx at `/market/api/v1/*` (no
+dedicated host port; the `/market/healthz` endpoint is also proxied for
+status checks). Skill ZIP uploads are limited to 20 MiB by the service
+(`MAX_UPLOAD_MB=20`) and 25 MiB at the nginx layer. Skill archives are stored
+in the `marketplace` MinIO bucket using presigned URLs (the bucket is NOT
+publicly readable — no `mc anonymous set download`). Clean slate:
+`docker compose down -v` removes the marketplace database and MinIO objects
+along with all other stack data.
+
+**Upgrading an existing deployment:** `setup.sh` only fills in
+`OCTO_MARKETPLACE_DB_PASSWORD` on a fresh install. Before running
+`docker compose up -d` on a deployment whose `docker/.env` was created
+before this service existed, append the variable manually:
+
+```bash
+echo "OCTO_MARKETPLACE_DB_PASSWORD=$(openssl rand -hex 16)" >> docker/.env
+```
+
+Without this step `market-preflight` aborts with a clear FATAL and
+`marketplace` is not started. Do **not** re-run `setup.sh --force` to
+add the variable — that regenerates every secret against the live
+volume.
+
+> MCP/Bot icon storage (`STORAGE_ICON_*`) is intentionally left unconfigured in
+> this OOTB stack; icon uploads are disabled until an operator wires up an
+> icon bucket. Skill uploads (the primary use case for #170) are fully
+> functional.
 
 ## Speech profile (voice transcription)
 

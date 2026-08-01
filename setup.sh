@@ -71,7 +71,11 @@ DOCKER_DIR="${SCRIPT_DIR}/docker"
 #   - search-kafka-init  : Kafka topic creation, activated by --search
 #                          (COMPOSE_PROFILES=search). `restart: "no"`, so it
 #                          legitimately ends at `Exited (0)` once topics exist.
-ONESHOT_SERVICES_RE='preflight|minio-init|search-kafka-init'
+#   - market-preflight   : Marketplace DB/user bootstrap on every boot (always
+#                          on). Covers existing-mysql-volume upgrades where
+#                          init-extra-dbs.sh does not re-run; exits 0 once
+#                          CREATE USER/GRANT are applied.
+ONESHOT_SERVICES_RE='preflight|minio-init|search-kafka-init|market-preflight'
 
 # YUJ-1084 / GH#46: root's primary group differs by OS — Linux uses `root`,
 # macOS (BSD) uses `wheel`. Hard-coding `chown root:root` aborts on macOS
@@ -108,14 +112,14 @@ ok()    { printf '%sPASS%s\n' "${GREEN}" "${RESET}"; }
 fail()  { printf '%sFAIL%s — %s\n' "${RED}" "${RESET}" "${1:-}"; }
 
 # Group banner printed inside --smoke-test / --verify to visually segment
-# the 11 probes into two failure-domain buckets:
+# the 12 probes into two failure-domain buckets:
 #
-#   [infra]     — steps 1-7: container health + nginx routing + SPA reachability.
+#   [infra]     — steps 1-8: container health + nginx routing + SPA reachability.
 #                 Failures here mean the platform itself is unhealthy (a
 #                 container is down, nginx isn't reverse-proxying, or a
 #                 host port is firewalled). The operator should look at
 #                 `docker compose ps` / `docker compose logs` first.
-#   [user-path] — steps 8-11: WuKongIM /ws upgrade + admin login + presign
+#   [user-path] — steps 9-12: WuKongIM /ws upgrade + admin login + presign
 #                 issuance + signed PUT. Failures here mean the platform
 #                 is up but the end-to-end business contract is broken
 #                 (auth wired wrong, MinIO IAM creds desynced, SigV4
@@ -228,8 +232,8 @@ compose_supports_wait() {
 #               long-running svcs must never exit), `Restarting (…)`,
 #               `Dead`, `Paused`, `Removing`, or missing container row.
 #
-#   one-shot service (preflight, minio-init, search-kafka-init — the
-#   ${ONESHOT_SERVICES_RE} set):
+#   one-shot service (preflight, minio-init, search-kafka-init,
+#   market-preflight — the ${ONESHOT_SERVICES_RE} set):
 #     PASS   →  `Exited (0)` (job ran and finished cleanly).
 #     WAIT   →  still `Up …` / `Created` (job has not finished yet).
 #     FATAL  →  `Exited (n>0)`, `Restarting (…)`, `Dead`, or missing
@@ -529,7 +533,7 @@ _compose_up_and_wait_once() {
     # Extract concrete failing service names from
     # `ps --format '{{.Service}}\t{{.Status}}'`. We flag anything that
     # is (unhealthy), Restarting, Dead, or Exited(non-zero). One-shot
-    # services (preflight / minio-init / search-kafka-init — the
+    # services (preflight / minio-init / search-kafka-init / market-preflight — the
     # ${ONESHOT_SERVICES_RE} set) are normally expected to be
     # `Exited (0)` and so are NOT a fail in that state — but if they
     # crash with `Exited (1)` / `Restarting` / `Dead` they MUST surface,
@@ -860,8 +864,8 @@ Generation:
                       runs `docker compose up -d --wait --wait-timeout
                       240`, blocking until every long-running service is
                       healthy AND every one-shot init job (preflight /
-                      minio-init, plus search-kafka-init under --search)
-                      exited 0. On a cold-boot soft timeout
+                      minio-init / market-preflight, plus search-kafka-init
+                      under --search) exited 0. On a cold-boot soft timeout
                       the wait retries ONCE on the warm mysql / image
                       cache (typically <10s). NEVER regenerates secrets
                       — run `./setup.sh` first to create docker/.env, or
@@ -891,10 +895,10 @@ Generation:
                       error with concrete remediation.
 
 Smoke test / tear-down (work against an already-existing docker/.env):
-  --smoke-test        Probe nginx / octo-server / matter / object-store
-                      paths end-to-end. Exits non-zero on any failure.
-                      Output is grouped into [infra] (steps 1-7) and
-                      [user-path] (steps 8-11) so a failure tells you
+  --smoke-test        Probe nginx / octo-server / matter / marketplace /
+                      object-store paths end-to-end. Exits non-zero on any
+                      failure. Output is grouped into [infra] (steps 1-8)
+                      and [user-path] (steps 9-12) so a failure tells you
                       immediately which failure-domain to investigate.
                       Real side-effects: 1 POST (admin login), 1 GET
                       (presign issuance), 1 PUT (1-byte sentinel object
@@ -999,11 +1003,11 @@ if [[ "${RUN_VERIFY}" == "true" ]]; then
   BASE_URL="http://${PROBE_HOST}:${HTTP_PORT}"
   fails=0
 
-  # Scope 3.2 (YUJ-1020): segment the 11 probes into [infra] (1-7) and
-  # [user-path] (8-11). See the `banner()` docstring above the helper
+  # Scope 3.2 (YUJ-1020): segment the 12 probes into [infra] (1-8) and
+  # [user-path] (9-12). See the `banner()` docstring above the helper
   # for the failure-domain rationale. Inserted purely as printf banners
   # so the existing step counters / fail accounting are untouched.
-  banner "[infra] container + nginx routing (step 1-7)"
+  banner "[infra] container + nginx routing (step 1-8)"
 
   step "container health (${CC} ps)"
   if ! ( cd "${DOCKER_DIR}" && ${CC} ps --all >/dev/null 2>&1 ); then
@@ -1061,6 +1065,15 @@ if [[ "${RUN_VERIFY}" == "true" ]]; then
     # surfaces it as a non-zero exit and CI / automation cannot mistake a
     # broken matter for a healthy one.
     fail "no 200 from matter — check 'docker compose logs matter'"
+    ((fails++)) || true
+  fi
+
+  step "octo-marketplace (GET ${BASE_URL}/market/healthz)"
+  if curl -fsS --max-time 5 "${BASE_URL}/market/healthz" >/dev/null 2>&1; then
+    ok
+  else
+    # marketplace is default-on, so a failed probe is a deployment failure.
+    fail "no 200 from marketplace — check 'docker compose logs marketplace'"
     ((fails++)) || true
   fi
 
@@ -1141,7 +1154,7 @@ if [[ "${RUN_VERIFY}" == "true" ]]; then
   # container. openssl is already a hard prereq (checked above), so the
   # base64-random WS key generation is always available.
   echo ""
-  banner "[user-path] auth + WS + presigned PUT (step 8-11)"
+  banner "[user-path] auth + WS + presigned PUT (step 9-12)"
   step "WuKongIM /ws upgrade probe (GET ${BASE_URL}/ws)"
   # R8 (YUJ-1002 / ReviewBot P0): replace curl with a python3 socket
   # probe. The R7 form looked like
@@ -1977,6 +1990,7 @@ OCTO_MINIO_APP_PASSWORD="$(openssl rand -hex 24)"
 OCTO_MATTER_DB_PASSWORD="$(openssl rand -hex 16)"
 OCTO_SUMMARY_DB_PASSWORD="$(openssl rand -hex 16)"
 OCTO_SUMMARY_READER_PASSWORD="$(openssl rand -hex 16)"
+OCTO_MARKETPLACE_DB_PASSWORD="$(openssl rand -hex 16)"
 OCTO_MASTER_KEY="$(openssl rand -hex 16)"
 OCTO_NOTIFY_INTERNAL_TOKEN="$(openssl rand -hex 32)"
 OCTO_WUKONGIM_MANAGER_TOKEN="$(openssl rand -hex 32)"
@@ -2019,6 +2033,7 @@ sed_inplace "s|^OCTO_MINIO_APP_PASSWORD=.*|OCTO_MINIO_APP_PASSWORD=${OCTO_MINIO_
 sed_inplace "s|^OCTO_MATTER_DB_PASSWORD=.*|OCTO_MATTER_DB_PASSWORD=${OCTO_MATTER_DB_PASSWORD}|" "${ENV_OUT}"
 sed_inplace "s|^OCTO_SUMMARY_DB_PASSWORD=.*|OCTO_SUMMARY_DB_PASSWORD=${OCTO_SUMMARY_DB_PASSWORD}|" "${ENV_OUT}"
 sed_inplace "s|^OCTO_SUMMARY_READER_PASSWORD=.*|OCTO_SUMMARY_READER_PASSWORD=${OCTO_SUMMARY_READER_PASSWORD}|" "${ENV_OUT}"
+sed_inplace "s|^OCTO_MARKETPLACE_DB_PASSWORD=.*|OCTO_MARKETPLACE_DB_PASSWORD=${OCTO_MARKETPLACE_DB_PASSWORD}|" "${ENV_OUT}"
 sed_inplace "s|^OCTO_MASTER_KEY=.*|OCTO_MASTER_KEY=${OCTO_MASTER_KEY}|" "${ENV_OUT}"
 sed_inplace "s|^OCTO_NOTIFY_INTERNAL_TOKEN=.*|OCTO_NOTIFY_INTERNAL_TOKEN=${OCTO_NOTIFY_INTERNAL_TOKEN}|" "${ENV_OUT}"
 sed_inplace "s|^OCTO_WUKONGIM_MANAGER_TOKEN=.*|OCTO_WUKONGIM_MANAGER_TOKEN=${OCTO_WUKONGIM_MANAGER_TOKEN}|" "${ENV_OUT}"
