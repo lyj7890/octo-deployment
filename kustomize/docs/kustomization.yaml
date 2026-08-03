@@ -21,7 +21,9 @@ kind: Kustomization
 resources:
   - docs-configmap.yaml
   - docs-backend.yaml
-  - docs-secret.example.yaml
+  # NOTE: docs-secret.example.yaml is NOT included here intentionally.
+  # Operators must create their own Secret with real credentials before applying.
+  # See docs-secret.example.yaml for the required keys and README.md for instructions.
 
 images:
   - name: mininglamposs/octo-docs-backend

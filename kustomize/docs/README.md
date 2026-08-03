@@ -20,14 +20,18 @@ Before applying this kustomization:
 ## Quick Start
 
 ```bash
-# 1. Create the secret (edit values first!)
+# 1. Create the secret FIRST (required - the kustomization does not include it)
 cp docs-secret.example.yaml docs-secret.yaml
-# Edit docs-secret.yaml with real credentials
+# Edit docs-secret.yaml with real credentials - DO NOT use placeholder values!
 kubectl apply -f docs-secret.yaml -n <namespace>
 
 # 2. Apply the docs kustomization
 kubectl apply -k kustomize/docs -n <namespace>
 ```
+
+> **Important**: The Secret is intentionally NOT included in the kustomization
+> resources to prevent accidental deployment with placeholder credentials.
+> You MUST create the Secret manually before applying.
 
 ## Configuration
 
