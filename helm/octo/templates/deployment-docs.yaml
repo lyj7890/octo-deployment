@@ -48,6 +48,60 @@ spec:
         - name: wait-for-redis
           image: {{ include "octo.image" (dict "repo" .Values.busybox.image.repository "tag" .Values.busybox.image.tag "ctx" .) }}
           command: ['sh', '-c', 'until nc -z {{ include "octo.redis.host" . }} {{ include "octo.redis.port" . }}; do echo waiting for redis; sleep 2; done']
+        - name: docs-schema-migrate
+          image: {{ include "octo.image" (dict "repo" .Values.docs.image.repository "tag" .Values.docs.image.tag "ctx" .) }}
+          imagePullPolicy: {{ .Values.docs.image.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              echo "[docs-migrate] Phase 1: checking schema..."
+              node - <<'JS'
+              const mysql = require('mysql2/promise');
+              const fs    = require('fs');
+              async function main() {
+                const conn = await mysql.createConnection({
+                  host:               process.env.MYSQL_HOST,
+                  port:               Number(process.env.MYSQL_PORT) || 3306,
+                  user:               process.env.MYSQL_USER,
+                  password:           process.env.MYSQL_PASSWORD,
+                  database:           process.env.MYSQL_DATABASE,
+                  multipleStatements: true,
+                });
+                const [[row]] = await conn.query(
+                  "SELECT COUNT(*) AS cnt FROM information_schema.tables WHERE table_schema = ? AND table_name = 'doc_meta'",
+                  [process.env.MYSQL_DATABASE]
+                );
+                if (row.cnt === 0) {
+                  console.log('[docs-migrate] doc_meta absent — importing schema.sql');
+                  const sql = fs.readFileSync('/app/migrations/schema.sql', 'utf8');
+                  await conn.query(sql);
+                  console.log('[docs-migrate] schema.sql imported successfully');
+                } else {
+                  console.log('[docs-migrate] schema already present, skipping schema.sql');
+                }
+                await conn.end();
+              }
+              main().catch(err => { console.error('[docs-migrate] FATAL:', err.message); process.exit(1); });
+              JS
+              echo "[docs-migrate] Phase 2: running incremental migrations..."
+              node dist/db/migrate.js
+              echo "[docs-migrate] done"
+          env:
+            - name: MYSQL_HOST
+              value: {{ include "octo.mysql.host" . | quote }}
+            - name: MYSQL_PORT
+              value: {{ include "octo.mysql.port" . | quote }}
+            - name: MYSQL_USER
+              value: "docs"
+            - name: MYSQL_DATABASE
+              value: "octo_docs"
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "octo.secretName" . }}
+                  key: DOCS_DB_PASSWORD
       containers:
         - name: octo-docs-backend
           image: {{ include "octo.image" (dict "repo" .Values.docs.image.repository "tag" .Values.docs.image.tag "ctx" .) }}
