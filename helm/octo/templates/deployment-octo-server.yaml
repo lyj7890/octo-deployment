@@ -119,7 +119,7 @@ spec:
               echo "[minio-bootstrap] attaching policy to $OCTO_MINIO_APP_USER..."
               mc admin policy attach local octo-app --user "$OCTO_MINIO_APP_USER" 2>/dev/null || true
 
-              for b in file chat moment sticker report chatbg common download group avatar; do
+              for b in file chat moment sticker report chatbg common download group avatar octo-docs-attachments; do
                 mc mb --ignore-existing "local/$b" >/dev/null
               done
 

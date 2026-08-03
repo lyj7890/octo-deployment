@@ -1,0 +1,29 @@
+# ConfigMap for octo-docs-backend configuration
+# Non-sensitive environment variables for the docs service.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: docs-config
+  labels:
+    app: octo-docs-backend
+data:
+  NODE_ENV: "production"
+  HTTP_PORT: "3000"
+  HOCUSPOCUS_PORT: "1234"
+  TRUST_PROXY: "1"
+  # MySQL connection (password comes from Secret)
+  MYSQL_HOST: "mysql"
+  MYSQL_PORT: "3306"
+  MYSQL_USER: "docs"
+  MYSQL_DATABASE: "octo_docs"
+  # Redis connection (reuses existing instance)
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
+  REDIS_PREFIX: "octo-docs"
+  # Identity — delegate auth to octo-server
+  OCTO_IDENTITY_MODE: "http"
+  OCTO_SERVER_BASE_URL: "http://octo-server:8090"
+  # Attachments via MinIO (s3 driver)
+  ATTACHMENT_DRIVER: "s3"
+  ATTACHMENT_BUCKET: "octo-docs-attachments"
+  ATTACHMENT_S3_FORCE_PATH_STYLE: "true"
