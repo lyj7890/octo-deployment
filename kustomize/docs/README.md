@@ -84,8 +84,10 @@ images:
 
 ## Database Initialization
 
-The docs-backend image includes migration scripts. On first run:
-1. Base schema is bootstrapped from `schema.sql` when `doc_meta` table is absent
-2. Incremental migrations are applied from `/app/migrations/upgrades/`
+The deployment includes a `docs-schema-migrate` init container that runs before the main container starts:
+1. Phase 1: Checks if `doc_meta` table exists; if absent, imports base schema from `schema.sql`
+2. Phase 2: Runs `node dist/db/migrate.js` for incremental migrations
 
-Minimum image version: `>= 0.3.0` (ships migrate.js and upgrades/).
+This ensures the database schema is ready before the application starts.
+
+Minimum image version: `>= 0.3.0` (ships migrate.js and schema.sql).

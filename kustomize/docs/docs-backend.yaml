@@ -50,6 +50,51 @@ spec:
         - name: wait-for-redis
           image: busybox:1.36
           command: ['sh', '-c', 'until nc -z redis 6379; do echo waiting for redis; sleep 2; done']
+        - name: docs-schema-migrate
+          image: mininglamposs/octo-docs-backend:0.4.0
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              echo "[docs-migrate] Phase 1: checking schema..."
+              node - <<'JS'
+              const mysql = require('mysql2/promise');
+              const fs    = require('fs');
+              async function main() {
+                const conn = await mysql.createConnection({
+                  host:               process.env.MYSQL_HOST,
+                  port:               Number(process.env.MYSQL_PORT) || 3306,
+                  user:               process.env.MYSQL_USER,
+                  password:           process.env.MYSQL_PASSWORD,
+                  database:           process.env.MYSQL_DATABASE,
+                  multipleStatements: true,
+                });
+                const [[row]] = await conn.query(
+                  "SELECT COUNT(*) AS cnt FROM information_schema.tables WHERE table_schema = ? AND table_name = 'doc_meta'",
+                  [process.env.MYSQL_DATABASE]
+                );
+                if (row.cnt === 0) {
+                  console.log('[docs-migrate] doc_meta absent — importing schema.sql');
+                  const sql = fs.readFileSync('/app/migrations/schema.sql', 'utf8');
+                  await conn.query(sql);
+                  console.log('[docs-migrate] schema.sql imported successfully');
+                } else {
+                  console.log('[docs-migrate] schema already present, skipping schema.sql');
+                }
+                await conn.end();
+              }
+              main().catch(err => { console.error('[docs-migrate] FATAL:', err.message); process.exit(1); });
+              JS
+              echo "[docs-migrate] Phase 2: running incremental migrations..."
+              node dist/db/migrate.js
+              echo "[docs-migrate] done"
+          envFrom:
+            - configMapRef:
+                name: docs-config
+            - secretRef:
+                name: docs-secret
       containers:
         - name: octo-docs-backend
           image: mininglamposs/octo-docs-backend:0.4.0

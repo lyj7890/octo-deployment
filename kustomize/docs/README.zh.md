@@ -83,8 +83,10 @@ images:
 
 ## 数据库初始化
 
-docs-backend 镜像内置迁移脚本。首次启动时：
-1. 当 `doc_meta` 表不存在时，从 `schema.sql` 导入基础 schema
-2. 从 `/app/migrations/upgrades/` 执行增量迁移
+部署包含 `docs-schema-migrate` init container，在主容器启动前运行：
+1. 阶段 1：检查 `doc_meta` 表是否存在，不存在则从 `schema.sql` 导入基础 schema
+2. 阶段 2：执行 `node dist/db/migrate.js` 增量迁移
 
-最低镜像版本要求：`>= 0.3.0`（包含 migrate.js 和 upgrades/）。
+这确保数据库 schema 在应用启动前已就绪。
+
+最低镜像版本要求：`>= 0.3.0`（包含 migrate.js 和 schema.sql）。

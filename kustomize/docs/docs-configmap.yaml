@@ -22,7 +22,7 @@ data:
   REDIS_PREFIX: "octo-docs"
   # Identity — delegate auth to octo-server
   OCTO_IDENTITY_MODE: "http"
-  OCTO_SERVER_BASE_URL: "http://octo-server:8090"
+  OCTO_SERVER_BASE_URL: "http://octo-server:80"
   # Attachments via MinIO (s3 driver)
   ATTACHMENT_DRIVER: "s3"
   ATTACHMENT_BUCKET: "octo-docs-attachments"
