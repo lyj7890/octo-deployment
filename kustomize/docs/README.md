@@ -16,6 +16,7 @@ Before applying this kustomization:
 2. **Redis**: Available at `redis:6379` (reuses the existing instance)
 3. **MinIO**: The `octo-docs-attachments` bucket must be created
 4. **Secret**: Create `docs-secret` from the example
+5. **Nginx**: Configure routes for `/docs-api/` and `/docs-ws/` (see [Nginx Routing](#nginx-routing) below)
 
 ## Quick Start
 
@@ -67,7 +68,36 @@ openssl rand -hex 16  # For MYSQL_PASSWORD
 
 ## Nginx Routing
 
-The docs service should be exposed through nginx with these routes:
+**Important**: This kustomization does NOT include nginx configuration. You must manually add the following routes to your nginx ConfigMap or configuration.
+
+Add these location blocks to your nginx server configuration:
+
+```nginx
+# REST API — docs CRUD, collab-token issuance, attachments
+location /docs-api/ {
+    proxy_pass http://octo-docs-backend:3000/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+
+# WebSocket — Hocuspocus real-time Yjs sync
+location /docs-ws/ {
+    proxy_pass http://octo-docs-backend:1234/;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout 86400s;
+    proxy_send_timeout 86400s;
+}
+```
+
+Routes:
 - `/docs-api/` → `octo-docs-backend:3000` (REST API)
 - `/docs-ws/` → `octo-docs-backend:1234` (WebSocket)
 

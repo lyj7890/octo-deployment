@@ -16,6 +16,7 @@ OCTO 实时协同文档后端（Hocuspocus + Yjs）。
 2. **Redis**：可访问 `redis:6379`（复用现有实例）
 3. **MinIO**：`octo-docs-attachments` 存储桶必须创建
 4. **Secret**：从示例文件创建 `docs-secret`
+5. **Nginx**：配置 `/docs-api/` 和 `/docs-ws/` 路由（见下方 [Nginx 路由](#nginx-路由)）
 
 ## 快速开始
 
@@ -66,7 +67,36 @@ openssl rand -hex 16  # 用于 MYSQL_PASSWORD
 
 ## Nginx 路由
 
-docs 服务需通过 nginx 暴露以下路由：
+**重要提示**：此 kustomization 不包含 nginx 配置。您必须手动将以下路由添加到 nginx ConfigMap 或配置中。
+
+将以下 location 块添加到 nginx server 配置：
+
+```nginx
+# REST API — 文档 CRUD、协同令牌签发、附件
+location /docs-api/ {
+    proxy_pass http://octo-docs-backend:3000/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+
+# WebSocket — Hocuspocus 实时 Yjs 同步
+location /docs-ws/ {
+    proxy_pass http://octo-docs-backend:1234/;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout 86400s;
+    proxy_send_timeout 86400s;
+}
+```
+
+路由说明：
 - `/docs-api/` → `octo-docs-backend:3000`（REST API）
 - `/docs-ws/` → `octo-docs-backend:1234`（WebSocket）
 

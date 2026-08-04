@@ -1,4 +1,7 @@
 {{- if .Values.docs.enabled }}
+{{- if include "octo.isCloudStorage" . }}
+{{- fail "docs.enabled=true requires MinIO storage (server.config.fileService=minio). Cloud storage providers (tencentCOS, aliOSS, s3, qiniu) are not supported for docs attachments." }}
+{{- end }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -143,6 +146,13 @@ spec:
               value: {{ include "octo.redis.port" . | quote }}
             - name: REDIS_PREFIX
               value: "octo-docs"
+            {{- if .Values.secrets.redisPassword }}
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "octo.secretName" . }}
+                  key: REDIS_PASSWORD
+            {{- end }}
             # Collab token signing
             - name: COLLAB_TOKEN_SECRET
               valueFrom:
