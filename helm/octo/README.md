@@ -336,6 +336,55 @@ kubectl exec -n <ns> sts/octo-search-kafka -- \
 
 ---
 
+## Docs (optional)
+
+Real-time collaborative documents (Hocuspocus + Yjs) is an **opt-in** component, **default OFF**. With `docs.enabled=false` (the default) the chart renders **zero** docs resources.
+
+```yaml
+docs:
+  enabled: true        # default false → no docs resources rendered
+```
+
+### Enable checklist
+
+Before enabling `docs.enabled=true`:
+
+1. **MySQL database and user must exist.** On a fresh install the `init-extra-dbs.sh` init script creates them automatically. On an **existing cluster**, you must create them manually:
+   ```sql
+   CREATE DATABASE IF NOT EXISTS octo_docs CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+   CREATE USER IF NOT EXISTS 'docs'@'%' IDENTIFIED BY '<DOCS_DB_PASSWORD>';
+   GRANT ALL PRIVILEGES ON octo_docs.* TO 'docs'@'%';
+   FLUSH PRIVILEGES;
+   ```
+2. **MinIO bucket must exist.** On a fresh install the `minio-bootstrap` init container creates `octo-docs-attachments`. On an **existing cluster**, create it manually:
+   ```bash
+   mc mb octo/octo-docs-attachments
+   ```
+3. **Set the docs secrets** in your values file:
+   ```yaml
+   secrets:
+     docsDbPassword: "$(openssl rand -hex 16)"
+     docsCollabSecret: "$(openssl rand -hex 32)"
+     docsAttachmentSecret: "$(openssl rand -hex 32)"
+   ```
+
+### Limitations
+
+- **MinIO required:** Cloud storage providers (tencentCOS, aliOSS, s3, qiniu) are not supported for docs attachments. The chart fails at render time if `docs.enabled=true` with non-MinIO storage.
+- **Redis password not supported:** The octo-docs-backend image does not read `REDIS_PASSWORD`. The chart fails at render time if both `docs.enabled=true` and `secrets.redisPassword` are set. Use a Redis instance without password authentication for docs.
+
+### Verify readiness
+
+```bash
+# Check docs pod is running
+kubectl get pods -n <ns> -l app.kubernetes.io/component=docs
+
+# Check REST API health
+kubectl exec -n <ns> deploy/octo-docs -- curl -s localhost:3000/healthz
+```
+
+---
+
 ## Uninstall
 
 ```bash

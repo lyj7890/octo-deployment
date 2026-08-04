@@ -27,8 +27,8 @@ data:
             "arn:aws:s3:::common",
             "arn:aws:s3:::download",
             "arn:aws:s3:::group",
-            "arn:aws:s3:::avatar",
-            "arn:aws:s3:::octo-docs-attachments"
+            "arn:aws:s3:::avatar"{{- if .Values.docs.enabled }},
+            "arn:aws:s3:::octo-docs-attachments"{{- end }}
           ]
         },
         {
@@ -51,8 +51,8 @@ data:
             "arn:aws:s3:::common/*",
             "arn:aws:s3:::download/*",
             "arn:aws:s3:::group/*",
-            "arn:aws:s3:::avatar/*",
-            "arn:aws:s3:::octo-docs-attachments/*"
+            "arn:aws:s3:::avatar/*"{{- if .Values.docs.enabled }},
+            "arn:aws:s3:::octo-docs-attachments/*"{{- end }}
           ]
         }
       ]
