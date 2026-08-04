@@ -137,6 +137,10 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- printf "%s-speech-admin" (include "octo.fullname" .) | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
+{{- define "octo.docs.fullname" -}}
+{{- printf "%s-docs" (include "octo.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
 {{- define "octo.nginx.fullname" -}}
 {{- printf "%s-nginx" (include "octo.fullname" .) | trunc 63 | trimSuffix "-" }}
 {{- end }}

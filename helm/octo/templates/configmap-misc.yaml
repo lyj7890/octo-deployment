@@ -27,7 +27,8 @@ data:
             "arn:aws:s3:::common",
             "arn:aws:s3:::download",
             "arn:aws:s3:::group",
-            "arn:aws:s3:::avatar"
+            "arn:aws:s3:::avatar"{{- if .Values.docs.enabled }},
+            "arn:aws:s3:::octo-docs-attachments"{{- end }}
           ]
         },
         {
@@ -50,7 +51,8 @@ data:
             "arn:aws:s3:::common/*",
             "arn:aws:s3:::download/*",
             "arn:aws:s3:::group/*",
-            "arn:aws:s3:::avatar/*"
+            "arn:aws:s3:::avatar/*"{{- if .Values.docs.enabled }},
+            "arn:aws:s3:::octo-docs-attachments/*"{{- end }}
           ]
         }
       ]
@@ -67,6 +69,9 @@ data:
     : "${OCTO_SUMMARY_READER_PASSWORD:=summary_reader}"
     {{- if .Values.speech.enabled }}
     : "${OCTO_SPEECH_DB_PASSWORD:=speech}"
+    {{- end }}
+    {{- if .Values.docs.enabled }}
+    : "${OCTO_DOCS_DB_PASSWORD:=docs}"
     {{- end }}
     : "${MYSQL_DATABASE:=octo}"
 
@@ -110,11 +115,17 @@ data:
     {{- if .Values.speech.enabled }}
     validate_password  OCTO_SPEECH_DB_PASSWORD       "$OCTO_SPEECH_DB_PASSWORD"
     {{- end }}
+    {{- if .Values.docs.enabled }}
+    validate_password  OCTO_DOCS_DB_PASSWORD         "$OCTO_DOCS_DB_PASSWORD"
+    {{- end }}
     reject_literal_default OCTO_MATTER_DB_PASSWORD       "$OCTO_MATTER_DB_PASSWORD"      "matter"
     reject_literal_default OCTO_SUMMARY_DB_PASSWORD      "$OCTO_SUMMARY_DB_PASSWORD"     "summary"
     reject_literal_default OCTO_SUMMARY_READER_PASSWORD  "$OCTO_SUMMARY_READER_PASSWORD" "summary_reader"
     {{- if .Values.speech.enabled }}
     reject_literal_default OCTO_SPEECH_DB_PASSWORD       "$OCTO_SPEECH_DB_PASSWORD"      "speech"
+    {{- end }}
+    {{- if .Values.docs.enabled }}
+    reject_literal_default OCTO_DOCS_DB_PASSWORD         "$OCTO_DOCS_DB_PASSWORD"        "docs"
     {{- end }}
     validate_password  MYSQL_ROOT_PASSWORD            "$MYSQL_ROOT_PASSWORD"
     validate_identifier MYSQL_DATABASE               "$MYSQL_DATABASE"
@@ -124,6 +135,9 @@ data:
     CREATE DATABASE IF NOT EXISTS octo_summary CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
     {{- if .Values.speech.enabled }}
     CREATE DATABASE IF NOT EXISTS octo_speech  CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+    {{- end }}
+    {{- if .Values.docs.enabled }}
+    CREATE DATABASE IF NOT EXISTS octo_docs    CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
     {{- end }}
 
     CREATE USER IF NOT EXISTS 'matter'@'%'  IDENTIFIED BY '${OCTO_MATTER_DB_PASSWORD}';
@@ -138,6 +152,11 @@ data:
     CREATE USER IF NOT EXISTS 'speech'@'%' IDENTIFIED BY '${OCTO_SPEECH_DB_PASSWORD}';
     ALTER USER IF EXISTS      'speech'@'%' IDENTIFIED BY '${OCTO_SPEECH_DB_PASSWORD}';
     {{- end }}
+    {{- if .Values.docs.enabled }}
+
+    CREATE USER IF NOT EXISTS 'docs'@'%' IDENTIFIED BY '${OCTO_DOCS_DB_PASSWORD}';
+    ALTER USER IF EXISTS      'docs'@'%' IDENTIFIED BY '${OCTO_DOCS_DB_PASSWORD}';
+    {{- end }}
 
     GRANT ALL PRIVILEGES ON octo_matter.*       TO 'matter'@'%';
     GRANT ALL PRIVILEGES ON octo_summary.*      TO 'summary'@'%';
@@ -145,11 +164,16 @@ data:
     {{- if .Values.speech.enabled }}
     GRANT ALL PRIVILEGES ON octo_speech.*       TO 'speech'@'%';
     {{- end }}
+    {{- if .Values.docs.enabled }}
+    GRANT ALL PRIVILEGES ON octo_docs.*         TO 'docs'@'%';
+    {{- end }}
     FLUSH PRIVILEGES;
     SQL
 
     {{- if .Values.speech.enabled }}
-    echo "[init-extra-dbs] created octo_matter + octo_summary + octo_speech + service users"
+    echo "[init-extra-dbs] created octo_matter + octo_summary + octo_speech{{- if .Values.docs.enabled }} + octo_docs{{- end }} + service users"
+    {{- else if .Values.docs.enabled }}
+    echo "[init-extra-dbs] created octo_matter + octo_summary + octo_docs + service users"
     {{- else }}
     echo "[init-extra-dbs] created octo_matter + octo_summary + service users"
     {{- end }}

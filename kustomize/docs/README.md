@@ -1,0 +1,123 @@
+# Docs Pipeline (Kustomize)
+
+Real-time collaborative document backend (Hocuspocus + Yjs) for OCTO.
+
+## Overview
+
+This kustomization deploys `octo-docs-backend`, a Node.js service that provides:
+- REST API on port 3000 for document CRUD and collab-token issuance
+- Hocuspocus WebSocket server on port 1234 for real-time Yjs sync
+
+## Prerequisites
+
+Before applying this kustomization:
+
+1. **MySQL**: The `octo_docs` database must exist with a `docs` user
+2. **Redis**: Available at `redis:6379` (reuses the existing instance)
+3. **MinIO**: The `octo-docs-attachments` bucket must be created
+4. **Secret**: Create `docs-secret` from the example
+5. **Nginx**: Configure routes for `/docs-api/` and `/docs-ws/` (see [Nginx Routing](#nginx-routing) below)
+
+## Quick Start
+
+```bash
+# 1. Create the secret FIRST (required - the kustomization does not include it)
+cp docs-secret.example.yaml docs-secret.yaml
+# Edit docs-secret.yaml with real credentials - DO NOT use placeholder values!
+kubectl apply -f docs-secret.yaml -n <namespace>
+
+# 2. Apply the docs kustomization
+kubectl apply -k kustomize/docs -n <namespace>
+```
+
+> **Important**: The Secret is intentionally NOT included in the kustomization
+> resources to prevent accidental deployment with placeholder credentials.
+> You MUST create the Secret manually before applying.
+
+## Configuration
+
+### ConfigMap (docs-config)
+
+Non-sensitive configuration in `docs-configmap.yaml`:
+- Database connection settings (host, port, user, database name)
+- Redis connection settings
+- MinIO bucket and driver configuration
+- Identity provider settings (delegates to octo-server)
+
+### Secret (docs-secret)
+
+Sensitive configuration must be created from `docs-secret.example.yaml`:
+
+| Key | Description |
+|-----|-------------|
+| `MYSQL_PASSWORD` | Password for the `docs` MySQL user |
+| `COLLAB_TOKEN_SECRET` | JWT signing secret for Hocuspocus tokens (min 32 chars) |
+| `ATTACHMENT_SIGNING_SECRET` | HMAC secret for attachment presigned URLs (min 32 chars) |
+| `COLLAB_TOKEN_PUBLIC_WS_URL` | Browser-reachable WebSocket URL (e.g. `ws://octo.example.com/docs-ws/`) |
+| `OCTO_WEB_ORIGIN` | Public URL where octo-web is served |
+| `ATTACHMENT_S3_ENDPOINT` | Browser-reachable S3/MinIO endpoint |
+| `ATTACHMENT_S3_ACCESS_KEY` | MinIO access key (use `octo-app`, not root) |
+| `ATTACHMENT_S3_SECRET_KEY` | MinIO secret key |
+| `CORS_ALLOWED_ORIGINS` | CORS allowed origins (comma-separated or `*`) |
+
+Generate secrets with:
+```bash
+openssl rand -hex 32  # For COLLAB_TOKEN_SECRET and ATTACHMENT_SIGNING_SECRET
+openssl rand -hex 16  # For MYSQL_PASSWORD
+```
+
+## Nginx Routing
+
+**Important**: This kustomization does NOT include nginx configuration. You must manually add the following routes to your nginx ConfigMap or configuration.
+
+Add these location blocks to your nginx server configuration:
+
+```nginx
+# REST API — docs CRUD, collab-token issuance, attachments
+location /docs-api/ {
+    proxy_pass http://octo-docs-backend:3000/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+
+# WebSocket — Hocuspocus real-time Yjs sync
+location /docs-ws/ {
+    proxy_pass http://octo-docs-backend:1234/;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout 86400s;
+    proxy_send_timeout 86400s;
+}
+```
+
+Routes:
+- `/docs-api/` → `octo-docs-backend:3000` (REST API)
+- `/docs-ws/` → `octo-docs-backend:1234` (WebSocket)
+
+## Image Override
+
+To use a different image tag:
+
+```yaml
+# kustomization.yaml
+images:
+  - name: mininglamposs/octo-docs-backend
+    newTag: "0.5.0"  # Your desired version
+```
+
+## Database Initialization
+
+The deployment includes a `docs-schema-migrate` init container that runs before the main container starts:
+1. Phase 1: Checks if `doc_meta` table exists; if absent, imports base schema from `schema.sql`
+2. Phase 2: Runs `node dist/db/migrate.js` for incremental migrations
+
+This ensures the database schema is ready before the application starts.
+
+Minimum image version: `>= 0.3.0` (ships migrate.js and schema.sql).

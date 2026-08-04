@@ -120,6 +120,11 @@ secrets:
   speechAdminPassword: ""
   speechAdminJwtSecret: ""
 
+  # Docs credentials. Required only when docs.enabled=true.
+  docsDbPassword: ""          # Password for the 'docs' MySQL user
+  docsCollabSecret: ""        # JWT signing secret for collab tokens (min 32 chars)
+  docsAttachmentSecret: ""    # HMAC secret for attachment presigned URLs (min 32 chars)
+
   # Inbound webhook HMAC secret (optional).
   webhookSecretKey: ""
 
@@ -488,6 +493,37 @@ speech:
       repository: curlimages/curl
       tag: "8.10.1"
       pullPolicy: IfNotPresent
+
+# =============================================================================
+# Docs (octo-docs-backend: Hocuspocus + Yjs real-time collaborative documents)
+# =============================================================================
+docs:
+  enabled: false
+  image:
+    repository: mininglamposs/octo-docs-backend
+    tag: "0.4.0"
+    pullPolicy: IfNotPresent
+  replicas: 1
+  config:
+    # Public WebSocket URL for Hocuspocus collab (browser-reachable)
+    # Defaults to ws://{{ domain }}:{{ nginx.service.port }}/docs-ws/
+    collabWsURL: ""
+    # Public web origin for shareable doc links
+    # Defaults to http://{{ domain }}:{{ nginx.service.port }}
+    webOrigin: ""
+    # S3 endpoint for attachments (browser-reachable for presigned URLs)
+    # Defaults to http://{{ domain }}:{{ nginx.service.port }}
+    s3Endpoint: ""
+    # CORS allowed origins (comma-separated or *)
+    # Defaults to http://{{ domain }}:{{ nginx.service.port }}
+    corsOrigins: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
 
 # =============================================================================
 # Search pipeline (Kafka + OpenSearch[analysis-ik] + es-indexer) — OPT-IN.

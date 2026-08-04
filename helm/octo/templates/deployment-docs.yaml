@@ -1,0 +1,216 @@
+{{- if .Values.docs.enabled }}
+{{- if include "octo.isCloudStorage" . }}
+{{- fail "docs.enabled=true requires MinIO storage (server.config.fileService=minio). Cloud storage providers (tencentCOS, aliOSS, s3, qiniu) are not supported for docs attachments." }}
+{{- end }}
+{{- if .Values.secrets.redisPassword }}
+{{- fail "docs.enabled=true is incompatible with secrets.redisPassword. The octo-docs-backend image does not support Redis authentication. Either disable docs or use a Redis instance without password authentication." }}
+{{- end }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "octo.docs.fullname" . }}
+  labels:
+    {{- include "octo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: docs
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+    - name: ws
+      port: 1234
+      targetPort: ws
+  selector:
+    {{- include "octo.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: docs
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "octo.docs.fullname" . }}
+  labels:
+    {{- include "octo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: docs
+spec:
+  replicas: {{ .Values.docs.replicas | default 1 }}
+  selector:
+    matchLabels:
+      {{- include "octo.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: docs
+  template:
+    metadata:
+      annotations:
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+      labels:
+        {{- include "octo.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: docs
+    spec:
+      {{- include "octo.imagePullSecrets" . | nindent 6 }}
+      initContainers:
+        - name: wait-for-mysql
+          image: {{ include "octo.image" (dict "repo" .Values.busybox.image.repository "tag" .Values.busybox.image.tag "ctx" .) }}
+          command: ['sh', '-c', 'until nc -z {{ include "octo.mysql.host" . }} {{ include "octo.mysql.port" . }}; do echo waiting for mysql; sleep 2; done']
+        - name: wait-for-redis
+          image: {{ include "octo.image" (dict "repo" .Values.busybox.image.repository "tag" .Values.busybox.image.tag "ctx" .) }}
+          command: ['sh', '-c', 'until nc -z {{ include "octo.redis.host" . }} {{ include "octo.redis.port" . }}; do echo waiting for redis; sleep 2; done']
+        - name: docs-schema-migrate
+          image: {{ include "octo.image" (dict "repo" .Values.docs.image.repository "tag" .Values.docs.image.tag "ctx" .) }}
+          imagePullPolicy: {{ .Values.docs.image.pullPolicy }}
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              echo "[docs-migrate] Phase 1: checking schema..."
+              node - <<'JS'
+              const mysql = require('mysql2/promise');
+              const fs    = require('fs');
+              async function main() {
+                const conn = await mysql.createConnection({
+                  host:               process.env.MYSQL_HOST,
+                  port:               Number(process.env.MYSQL_PORT) || 3306,
+                  user:               process.env.MYSQL_USER,
+                  password:           process.env.MYSQL_PASSWORD,
+                  database:           process.env.MYSQL_DATABASE,
+                  multipleStatements: true,
+                });
+                const [[row]] = await conn.query(
+                  "SELECT COUNT(*) AS cnt FROM information_schema.tables WHERE table_schema = ? AND table_name = 'doc_meta'",
+                  [process.env.MYSQL_DATABASE]
+                );
+                if (row.cnt === 0) {
+                  console.log('[docs-migrate] doc_meta absent — importing schema.sql');
+                  const sql = fs.readFileSync('/app/migrations/schema.sql', 'utf8');
+                  await conn.query(sql);
+                  console.log('[docs-migrate] schema.sql imported successfully');
+                } else {
+                  console.log('[docs-migrate] schema already present, skipping schema.sql');
+                }
+                await conn.end();
+              }
+              main().catch(err => { console.error('[docs-migrate] FATAL:', err.message); process.exit(1); });
+              JS
+              echo "[docs-migrate] Phase 2: running incremental migrations..."
+              node dist/db/migrate.js
+              echo "[docs-migrate] done"
+          env:
+            - name: MYSQL_HOST
+              value: {{ include "octo.mysql.host" . | quote }}
+            - name: MYSQL_PORT
+              value: {{ include "octo.mysql.port" . | quote }}
+            - name: MYSQL_USER
+              value: "docs"
+            - name: MYSQL_DATABASE
+              value: "octo_docs"
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "octo.secretName" . }}
+                  key: DOCS_DB_PASSWORD
+      containers:
+        - name: octo-docs-backend
+          image: {{ include "octo.image" (dict "repo" .Values.docs.image.repository "tag" .Values.docs.image.tag "ctx" .) }}
+          imagePullPolicy: {{ .Values.docs.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 3000
+            - name: ws
+              containerPort: 1234
+          env:
+            - name: TZ
+              value: {{ .Values.timezone | default "UTC" | quote }}
+            - name: NODE_ENV
+              value: "production"
+            - name: HTTP_PORT
+              value: "3000"
+            - name: HOCUSPOCUS_PORT
+              value: "1234"
+            - name: TRUST_PROXY
+              value: "1"
+            # MySQL connection
+            - name: MYSQL_HOST
+              value: {{ include "octo.mysql.host" . | quote }}
+            - name: MYSQL_PORT
+              value: {{ include "octo.mysql.port" . | quote }}
+            - name: MYSQL_USER
+              value: "docs"
+            - name: MYSQL_DATABASE
+              value: "octo_docs"
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "octo.secretName" . }}
+                  key: DOCS_DB_PASSWORD
+            # Redis connection
+            - name: REDIS_HOST
+              value: {{ include "octo.redis.host" . | quote }}
+            - name: REDIS_PORT
+              value: {{ include "octo.redis.port" . | quote }}
+            - name: REDIS_PREFIX
+              value: "octo-docs"
+            # Collab token signing
+            - name: COLLAB_TOKEN_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "octo.secretName" . }}
+                  key: DOCS_COLLAB_SECRET
+            {{- $baseURL := include "octo.externalBaseURL" . }}
+            {{- $collabWsURL := .Values.docs.config.collabWsURL | default (printf "%s/docs-ws/" ($baseURL | replace "https://" "wss://" | replace "http://" "ws://")) }}
+            - name: COLLAB_TOKEN_PUBLIC_WS_URL
+              value: {{ $collabWsURL | quote }}
+            # Identity — delegate auth to octo-server
+            - name: OCTO_IDENTITY_MODE
+              value: "http"
+            - name: OCTO_SERVER_BASE_URL
+              value: "http://{{ include "octo.server.fullname" . }}:8090"
+            {{- $webOrigin := .Values.docs.config.webOrigin | default $baseURL }}
+            - name: OCTO_WEB_ORIGIN
+              value: {{ $webOrigin | quote }}
+            # Attachments via MinIO (s3 driver)
+            - name: ATTACHMENT_DRIVER
+              value: "s3"
+            - name: ATTACHMENT_BUCKET
+              value: "octo-docs-attachments"
+            {{- $s3Endpoint := .Values.docs.config.s3Endpoint | default $baseURL }}
+            - name: ATTACHMENT_S3_ENDPOINT
+              value: {{ $s3Endpoint | quote }}
+            - name: ATTACHMENT_S3_ACCESS_KEY
+              value: {{ include "octo.minio.appUser" . | quote }}
+            - name: ATTACHMENT_S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "octo.secretName" . }}
+                  key: OCTO_MINIO_APP_PASSWORD
+            - name: ATTACHMENT_S3_FORCE_PATH_STYLE
+              value: "true"
+            - name: ATTACHMENT_SIGNING_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "octo.secretName" . }}
+                  key: DOCS_ATTACHMENT_SECRET
+            # CORS
+            {{- $corsOrigins := .Values.docs.config.corsOrigins | default $baseURL }}
+            - name: CORS_ALLOWED_ORIGINS
+              value: {{ $corsOrigins | quote }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          {{- with .Values.docs.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}
