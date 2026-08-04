@@ -360,13 +360,15 @@ Before enabling `docs.enabled=true`:
    ```bash
    mc mb octo/octo-docs-attachments
    ```
-3. **Set the docs secrets** in your values file:
-   ```yaml
-   secrets:
-     docsDbPassword: "$(openssl rand -hex 16)"
-     docsCollabSecret: "$(openssl rand -hex 32)"
-     docsAttachmentSecret: "$(openssl rand -hex 32)"
+3. **Set the docs secrets** via `--set` flags (generate values first, then pass them):
+   ```bash
+   helm upgrade octo ./helm/octo \
+     --set secrets.docsDbPassword="$(openssl rand -hex 16)" \
+     --set secrets.docsCollabSecret="$(openssl rand -hex 32)" \
+     --set secrets.docsAttachmentSecret="$(openssl rand -hex 32)"
    ```
+   
+   > **Warning:** Do NOT put `$(...)` in a YAML values file — Helm does not execute shell commands. Generate the values first, then copy/paste, or use `--set` as shown above.
 
 ### Limitations
 

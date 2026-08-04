@@ -360,13 +360,15 @@ docs:
    ```bash
    mc mb octo/octo-docs-attachments
    ```
-3. **设置 docs 密钥**在 values 文件中：
-   ```yaml
-   secrets:
-     docsDbPassword: "$(openssl rand -hex 16)"
-     docsCollabSecret: "$(openssl rand -hex 32)"
-     docsAttachmentSecret: "$(openssl rand -hex 32)"
+3. **设置 docs 密钥**通过 `--set` 标志（先生成值，再传入）：
+   ```bash
+   helm upgrade octo ./helm/octo \
+     --set secrets.docsDbPassword="$(openssl rand -hex 16)" \
+     --set secrets.docsCollabSecret="$(openssl rand -hex 32)" \
+     --set secrets.docsAttachmentSecret="$(openssl rand -hex 32)"
    ```
+   
+   > **警告：** 不要在 YAML values 文件中写 `$(...)`  — Helm 不会执行 shell 命令。请先生成值，再复制粘贴，或如上所示使用 `--set`。
 
 ### 限制
 
