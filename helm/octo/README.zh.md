@@ -336,6 +336,55 @@ kubectl exec -n <ns> sts/octo-search-kafka -- \
 
 ---
 
+## 文档协同（可选）
+
+实时协同文档（Hocuspocus + Yjs）是**可选**组件，**默认关闭**。当 `docs.enabled=false`（默认）时，chart 渲染**零**个 docs 资源。
+
+```yaml
+docs:
+  enabled: true        # 默认 false → 不渲染任何 docs 资源
+```
+
+### 启用检查清单
+
+在启用 `docs.enabled=true` 之前：
+
+1. **MySQL 数据库和用户必须存在。** 全新安装时，`init-extra-dbs.sh` 初始化脚本会自动创建。在**现有集群**上，需要手动创建：
+   ```sql
+   CREATE DATABASE IF NOT EXISTS octo_docs CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+   CREATE USER IF NOT EXISTS 'docs'@'%' IDENTIFIED BY '<DOCS_DB_PASSWORD>';
+   GRANT ALL PRIVILEGES ON octo_docs.* TO 'docs'@'%';
+   FLUSH PRIVILEGES;
+   ```
+2. **MinIO bucket 必须存在。** 全新安装时，`minio-bootstrap` init container 会创建 `octo-docs-attachments`。在**现有集群**上，需要手动创建：
+   ```bash
+   mc mb octo/octo-docs-attachments
+   ```
+3. **设置 docs 密钥**在 values 文件中：
+   ```yaml
+   secrets:
+     docsDbPassword: "$(openssl rand -hex 16)"
+     docsCollabSecret: "$(openssl rand -hex 32)"
+     docsAttachmentSecret: "$(openssl rand -hex 32)"
+   ```
+
+### 限制
+
+- **必须使用 MinIO：** 云存储提供商（tencentCOS、aliOSS、s3、qiniu）不支持 docs 附件存储。当 `docs.enabled=true` 且使用非 MinIO 存储时，chart 在渲染时报错。
+- **Redis 密码不支持：** octo-docs-backend 镜像不读取 `REDIS_PASSWORD`。当 `docs.enabled=true` 和 `secrets.redisPassword` 同时设置时，chart 在渲染时报错。请使用无密码认证的 Redis 实例。
+
+### 验证就绪
+
+```bash
+# 检查 docs pod 是否运行
+kubectl get pods -n <ns> -l app.kubernetes.io/component=docs
+
+# 检查 REST API 健康
+kubectl exec -n <ns> deploy/octo-docs -- curl -s localhost:3000/healthz
+```
+
+---
+
 ## 卸载
 
 ```bash
