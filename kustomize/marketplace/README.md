@@ -14,7 +14,7 @@ Before applying this kustomization:
 1. **MySQL**: The `octo_marketplace` database must exist with a `marketplace` user
 2. **Redis**: Available at `redis:6379` (reuses the existing instance)
 3. **MinIO**: The `marketplace` bucket must be created
-4. **OCTO Server**: Running at `octo-server:8090` (required for auth delegation)
+4. **OCTO Server**: Running at `octo-server` (required for auth delegation)
 5. **Secret**: Create `marketplace-secret` from the example
 6. **Nginx**: Configure route for `/market/api/` (see [Nginx Routing](#nginx-routing) below)
 
@@ -86,7 +86,7 @@ Add this location block to your nginx server configuration:
 ```nginx
 # Marketplace API — skill/bot/MCP catalog
 location /market/api/ {
-    rewrite ^/market/api/(.*) /$1 break;
+    rewrite ^/market/api/(.*) /api/$1 break;
     proxy_pass http://octo-marketplace:8092;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;

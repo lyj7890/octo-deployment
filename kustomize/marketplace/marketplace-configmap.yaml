@@ -24,6 +24,6 @@ data:
   REDIS_HOST: "redis"
   REDIS_PORT: "6379"
   # OCTO server for auth delegation
-  OCTO_API_URL: "http://octo-server:8090"
+  OCTO_API_URL: "http://octo-server"
   # MinIO config (secrets via Secret)
   OSS_BUCKET: "marketplace"

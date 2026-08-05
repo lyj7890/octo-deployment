@@ -14,7 +14,7 @@ OCTO 技能/机器人/MCP 市场服务。
 1. **MySQL**：`octo_marketplace` 数据库必须存在，并创建 `marketplace` 用户
 2. **Redis**：可访问 `redis:6379`（复用现有实例）
 3. **MinIO**：`marketplace` 存储桶必须创建
-4. **OCTO Server**：运行在 `octo-server:8090`（身份认证委托）
+4. **OCTO Server**：运行在 `octo-server`（身份认证委托）
 5. **Secret**：从示例文件创建 `marketplace-secret`
 6. **Nginx**：配置 `/market/api/` 路由（见下方 [Nginx 路由](#nginx-路由)）
 
@@ -85,7 +85,7 @@ openssl rand -hex 16  # 用于 MySQL 密码
 ```nginx
 # Marketplace API — 技能/机器人/MCP 市场
 location /market/api/ {
-    rewrite ^/market/api/(.*) /$1 break;
+    rewrite ^/market/api/(.*) /api/$1 break;
     proxy_pass http://octo-marketplace:8092;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;

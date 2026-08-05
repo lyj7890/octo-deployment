@@ -339,10 +339,6 @@ spec:
                   name: {{ include "octo.secretName" . }}
                   key: TS_SUPPORT_EMAILPWD
             {{- end }}
-            {{- if .Values.marketplace.enabled }}
-            - name: MARKET_API_URL
-              value: "http://{{ include "octo.marketplace.fullname" . }}:8092"
-            {{- end }}
           readinessProbe:
             httpGet:
               path: /v1/ping

@@ -30,7 +30,7 @@ metadata:
     {{- include "octo.labels" . | nindent 4 }}
     app.kubernetes.io/component: marketplace
 spec:
-  replicas: {{ .Values.marketplace.replicas | default 1 }}
+  replicas: {{ .Values.marketplace.replicas }}
   selector:
     matchLabels:
       {{- include "octo.selectorLabels" . | nindent 6 }}
@@ -72,7 +72,7 @@ spec:
             - name: API_PORT
               value: "8092"
             - name: AUTH_ENABLED
-              value: {{ .Values.marketplace.config.authEnabled | default "true" | quote }}
+              value: {{ ternary "true" "false" .Values.marketplace.config.authEnabled | quote }}
             # MySQL connection - password must be defined before DSN references it
             - name: MARKETPLACE_DB_PASSWORD
               valueFrom:
