@@ -141,6 +141,10 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- printf "%s-docs" (include "octo.fullname" .) | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
+{{- define "octo.marketplace.fullname" -}}
+{{- printf "%s-marketplace" (include "octo.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
 {{- define "octo.nginx.fullname" -}}
 {{- printf "%s-nginx" (include "octo.fullname" .) | trunc 63 | trimSuffix "-" }}
 {{- end }}
@@ -268,6 +272,32 @@ Returns empty when cloud storage is active (endpoint is irrelevant).
 {{- printf "%s:%v" (include "octo.minio.fullname" .) (.Values.minio.service.apiPort | default 9000) }}
 {{- else }}
 {{- required "externalMinio.endpoint is required when minio.enabled=false" .Values.externalMinio.endpoint }}
+{{- end }}
+{{- end }}
+
+{{/*
+MinIO host (without port).
+*/}}
+{{- define "octo.minio.host" -}}
+{{- if .Values.minio.enabled }}
+{{- include "octo.minio.fullname" . }}
+{{- else if include "octo.isCloudStorage" . }}
+{{- "" }}
+{{- else }}
+{{- (split ":" (required "externalMinio.endpoint is required when minio.enabled=false" .Values.externalMinio.endpoint))._0 }}
+{{- end }}
+{{- end }}
+
+{{/*
+MinIO port.
+*/}}
+{{- define "octo.minio.port" -}}
+{{- if .Values.minio.enabled }}
+{{- .Values.minio.service.apiPort | default 9000 }}
+{{- else if include "octo.isCloudStorage" . }}
+{{- "" }}
+{{- else }}
+{{- (split ":" (required "externalMinio.endpoint is required when minio.enabled=false" .Values.externalMinio.endpoint))._1 | default "9000" }}
 {{- end }}
 {{- end }}
 

@@ -65,6 +65,13 @@ data:
     }
     {{- end }}
 
+    {{- if .Values.marketplace.enabled }}
+    upstream octo_marketplace_api {
+        server {{ include "octo.marketplace.fullname" . }}:8092;
+        keepalive 8;
+    }
+    {{- end }}
+
     server {
         listen       80 default_server;
         listen       [::]:80 default_server;
@@ -208,13 +215,32 @@ data:
         }
         {{- end }}
 
+        {{- if .Values.marketplace.enabled }}
+        location /market/api/ {
+            limit_req zone=octo_api burst=20 nodelay;
+            rewrite ^/market/api/(.*) /api/$1 break;
+            proxy_pass         http://octo_marketplace_api;
+            proxy_http_version 1.1;
+            proxy_set_header   Host              $host;
+            proxy_set_header   X-Real-IP         $remote_addr;
+            proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+            proxy_set_header   X-Forwarded-Proto $scheme;
+            proxy_read_timeout 300s;
+            client_max_body_size {{ add (.Values.marketplace.config.maxUploadMB | default 20) 5 }}m;
+        }
+
+        location = /market/api {
+            return 301 /market/api/;
+        }
+        {{- end }}
+
         location = /_octo_up {
             default_type text/html;
             return 200 "OCTO Server is up. Visit /admin/ for the admin console.";
         }
 
         {{- if not (include "octo.isCloudStorage" .) }}
-        location ~ ^/(file|chat|moment|sticker|report|chatbg|common|download|group|avatar{{- if .Values.docs.enabled }}|octo-docs-attachments{{- end }})/.+ {
+        location ~ ^/(file|chat|moment|sticker|report|chatbg|common|download|group|avatar{{- if .Values.docs.enabled }}|octo-docs-attachments{{- end }}{{- if .Values.marketplace.enabled }}|marketplace{{- end }})/.+ {
             proxy_pass         http://octo_minio_api;
             proxy_http_version 1.1;
             proxy_set_header   Host              $http_host;

@@ -387,6 +387,55 @@ kubectl exec -n <ns> deploy/octo-docs -- curl -s localhost:3000/healthz
 
 ---
 
+## Marketplace (optional)
+
+Skill / bot / MCP catalog service is an **opt-in** component, **default OFF**. With `marketplace.enabled=false` (the default) the chart renders **zero** marketplace resources.
+
+```yaml
+marketplace:
+  enabled: true        # default false → no marketplace resources rendered
+```
+
+### Enable checklist
+
+Before enabling `marketplace.enabled=true`:
+
+1. **MySQL database and user must exist.** On a fresh install the `init-extra-dbs.sh` init script creates them automatically. On an **existing cluster**, you must create them manually:
+   ```sql
+   CREATE DATABASE IF NOT EXISTS octo_marketplace CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+   CREATE USER IF NOT EXISTS 'marketplace'@'%' IDENTIFIED BY '<MARKETPLACE_DB_PASSWORD>';
+   GRANT ALL PRIVILEGES ON octo_marketplace.* TO 'marketplace'@'%';
+   FLUSH PRIVILEGES;
+   ```
+2. **MinIO bucket must exist.** On a fresh install the `minio-bootstrap` init container creates `marketplace`. On an **existing cluster**, create it manually:
+   ```bash
+   mc mb octo/marketplace
+   ```
+3. **Set the marketplace secret** via `--set` flag (generate value first, then pass it):
+   ```bash
+   helm upgrade octo ./helm/octo \
+     --set secrets.marketplaceDbPassword="$(openssl rand -hex 16)"
+   ```
+   
+   > **Warning:** Do NOT put `$(...)` in a YAML values file — Helm does not execute shell commands. Generate the value first, then copy/paste, or use `--set` as shown above.
+
+### Limitations
+
+- **MinIO required:** Cloud storage providers (tencentCOS, aliOSS, s3, qiniu) are not supported for marketplace. The chart fails at render time if `marketplace.enabled=true` with non-MinIO storage.
+- **Redis password not supported:** The octo-marketplace image uses `REDIS_URL` without password authentication. The chart fails at render time if both `marketplace.enabled=true` and `secrets.redisPassword` are set. Use a Redis instance without password authentication for marketplace.
+
+### Verify readiness
+
+```bash
+# Check marketplace pod is running
+kubectl get pods -n <ns> -l app.kubernetes.io/component=marketplace
+
+# Check REST API health
+kubectl exec -n <ns> deploy/octo-marketplace -- wget -qO- localhost:8092/healthz
+```
+
+---
+
 ## Uninstall
 
 ```bash

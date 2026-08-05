@@ -53,6 +53,10 @@ spec:
             - name: SUMMARY_API_URL
               value: "http://{{ include "octo.summaryApi.fullname" . }}:8080"
             {{- end }}
+            {{- if .Values.marketplace.enabled }}
+            - name: MARKET_API_URL
+              value: "http://{{ include "octo.marketplace.fullname" . }}:8092"
+            {{- end }}
           readinessProbe:
             httpGet:
               path: /
