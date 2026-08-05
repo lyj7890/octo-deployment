@@ -1,0 +1,135 @@
+{{- if .Values.marketplace.enabled }}
+{{- if include "octo.isCloudStorage" . }}
+{{- fail "marketplace.enabled=true requires MinIO storage (server.config.fileService=minio). Cloud storage providers (tencentCOS, aliOSS, s3, qiniu) are not supported for marketplace." }}
+{{- end }}
+{{- if .Values.secrets.redisPassword }}
+{{- fail "marketplace.enabled=true is incompatible with secrets.redisPassword. The octo-marketplace image uses REDIS_URL without password authentication. Either disable marketplace or use a Redis instance without password authentication." }}
+{{- end }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "octo.marketplace.fullname" . }}
+  labels:
+    {{- include "octo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: marketplace
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8092
+      targetPort: http
+  selector:
+    {{- include "octo.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: marketplace
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "octo.marketplace.fullname" . }}
+  labels:
+    {{- include "octo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: marketplace
+spec:
+  replicas: {{ .Values.marketplace.replicas | default 1 }}
+  selector:
+    matchLabels:
+      {{- include "octo.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: marketplace
+  template:
+    metadata:
+      annotations:
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+      labels:
+        {{- include "octo.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: marketplace
+    spec:
+      {{- include "octo.imagePullSecrets" . | nindent 6 }}
+      initContainers:
+        - name: wait-for-mysql
+          image: {{ include "octo.image" (dict "repo" .Values.busybox.image.repository "tag" .Values.busybox.image.tag "ctx" .) }}
+          command: ['sh', '-c', 'until nc -z {{ include "octo.mysql.host" . }} {{ include "octo.mysql.port" . }}; do echo waiting for mysql; sleep 2; done']
+        - name: wait-for-redis
+          image: {{ include "octo.image" (dict "repo" .Values.busybox.image.repository "tag" .Values.busybox.image.tag "ctx" .) }}
+          command: ['sh', '-c', 'until nc -z {{ include "octo.redis.host" . }} {{ include "octo.redis.port" . }}; do echo waiting for redis; sleep 2; done']
+        - name: wait-for-minio
+          image: {{ include "octo.image" (dict "repo" .Values.busybox.image.repository "tag" .Values.busybox.image.tag "ctx" .) }}
+          command: ['sh', '-c', 'until nc -z {{ include "octo.minio.host" . }} {{ include "octo.minio.port" . }}; do echo waiting for minio; sleep 2; done']
+        - name: wait-for-server
+          image: {{ include "octo.image" (dict "repo" .Values.busybox.image.repository "tag" .Values.busybox.image.tag "ctx" .) }}
+          command: ['sh', '-c', 'until wget -q -O- http://{{ include "octo.server.fullname" . }}:8090/v1/ping >/dev/null 2>&1; do echo waiting for octo-server; sleep 5; done']
+      containers:
+        - name: octo-marketplace
+          image: {{ include "octo.image" (dict "repo" .Values.marketplace.image.repository "tag" .Values.marketplace.image.tag "ctx" .) }}
+          imagePullPolicy: {{ .Values.marketplace.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8092
+          env:
+            - name: TZ
+              value: {{ .Values.timezone | default "UTC" | quote }}
+            - name: APP_ENV
+              value: "prod"
+            - name: API_PORT
+              value: "8092"
+            - name: AUTH_ENABLED
+              value: {{ .Values.marketplace.config.authEnabled | default true | quote }}
+            # MySQL DSN (built from components)
+            - name: MYSQL_DSN
+              value: "marketplace:$(MARKETPLACE_DB_PASSWORD)@tcp({{ include "octo.mysql.host" . }}:{{ include "octo.mysql.port" . }})/octo_marketplace?charset=utf8mb4&parseTime=true"
+            - name: MARKETPLACE_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "octo.secretName" . }}
+                  key: MARKETPLACE_DB_PASSWORD
+            # Redis URL
+            - name: REDIS_URL
+              value: "redis://{{ include "octo.redis.host" . }}:{{ include "octo.redis.port" . }}/0"
+            # OCTO server for auth delegation
+            - name: OCTO_API_URL
+              value: "http://{{ include "octo.server.fullname" . }}:8090"
+            # Storage configuration
+            - name: STORAGE_DRIVER
+              value: {{ .Values.marketplace.config.storageDriver | default "oss" | quote }}
+            - name: OSS_ENDPOINT
+              value: "http://{{ include "octo.minio.endpoint" . }}"
+            - name: OSS_BUCKET
+              value: "marketplace"
+            - name: OSS_ACCESS_KEY
+              value: {{ include "octo.minio.appUser" . | quote }}
+            - name: OSS_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "octo.secretName" . }}
+                  key: OCTO_MINIO_APP_PASSWORD
+            - name: OSS_REGION
+              value: "us-east-1"
+            - name: OSS_PATH_STYLE
+              value: "true"
+            {{- $baseURL := include "octo.externalBaseURL" . }}
+            - name: OSS_PUBLIC_ENDPOINT
+              value: {{ .Values.marketplace.config.ossPublicEndpoint | default $baseURL | quote }}
+            - name: OSS_DOWNLOAD_SIGNED
+              value: "true"
+            - name: MAX_UPLOAD_MB
+              value: {{ .Values.marketplace.config.maxUploadMB | default 20 | quote }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          {{- with .Values.marketplace.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}

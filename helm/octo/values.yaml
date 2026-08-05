@@ -125,6 +125,9 @@ secrets:
   docsCollabSecret: ""        # JWT signing secret for collab tokens (min 32 chars)
   docsAttachmentSecret: ""    # HMAC secret for attachment presigned URLs (min 32 chars)
 
+  # Marketplace credentials. Required only when marketplace.enabled=true.
+  marketplaceDbPassword: ""   # Password for the 'marketplace' MySQL user
+
   # Inbound webhook HMAC secret (optional).
   webhookSecretKey: ""
 
@@ -517,6 +520,35 @@ docs:
     # CORS allowed origins (comma-separated or *)
     # Defaults to http://{{ domain }}:{{ nginx.service.port }}
     corsOrigins: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+# =============================================================================
+# Marketplace (skill / bot / MCP catalog) — OPT-IN.
+# Default OFF: with marketplace.enabled=false NO marketplace resources are rendered.
+# =============================================================================
+marketplace:
+  enabled: false
+  image:
+    repository: mininglamposs/octo-marketplace
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  replicas: 1
+  config:
+    # Whether to require authentication for API calls
+    authEnabled: true
+    # Storage driver (oss = MinIO-compatible S3)
+    storageDriver: oss
+    # Public endpoint for presigned URL downloads (browser-reachable)
+    # Defaults to http://{{ domain }}:{{ nginx.service.port }}
+    ossPublicEndpoint: ""
+    # Maximum upload size in MB
+    maxUploadMB: 20
   resources:
     requests:
       cpu: 100m

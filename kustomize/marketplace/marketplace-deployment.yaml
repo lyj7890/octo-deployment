@@ -1,0 +1,100 @@
+# octo-marketplace: Skill / Bot / MCP catalog service
+#
+# HTTP API on port 8092 for skill/bot/MCP marketplace operations.
+#
+# Prerequisites:
+#   - MySQL with `octo_marketplace` database created
+#   - Redis available at redis:6379
+#   - MinIO with `marketplace` bucket created
+#   - marketplace-secret created with required credentials
+apiVersion: v1
+kind: Service
+metadata:
+  name: octo-marketplace
+  labels:
+    app: octo-marketplace
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8092
+      targetPort: http
+  selector:
+    app: octo-marketplace
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: octo-marketplace
+  labels:
+    app: octo-marketplace
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: octo-marketplace
+  template:
+    metadata:
+      labels:
+        app: octo-marketplace
+    spec:
+      initContainers:
+        - name: wait-for-mysql
+          image: busybox:1.36
+          envFrom:
+            - configMapRef:
+                name: marketplace-config
+          command: ['sh', '-c', 'until nc -z $MYSQL_HOST $MYSQL_PORT; do echo waiting for mysql; sleep 2; done']
+        - name: wait-for-redis
+          image: busybox:1.36
+          envFrom:
+            - configMapRef:
+                name: marketplace-config
+          command: ['sh', '-c', 'until nc -z $REDIS_HOST $REDIS_PORT; do echo waiting for redis; sleep 2; done']
+        - name: wait-for-minio
+          image: busybox:1.36
+          envFrom:
+            - secretRef:
+                name: marketplace-secret
+          command: ['sh', '-c', 'until nc -z $OSS_ENDPOINT_HOST $OSS_ENDPOINT_PORT; do echo waiting for minio; sleep 2; done']
+        - name: wait-for-server
+          image: busybox:1.36
+          envFrom:
+            - configMapRef:
+                name: marketplace-config
+          command: ['sh', '-c', 'until wget -q -O- $OCTO_API_URL/v1/ping >/dev/null 2>&1; do echo waiting for octo-server; sleep 5; done']
+      containers:
+        - name: octo-marketplace
+          image: mininglamposs/octo-marketplace:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8092
+          envFrom:
+            - configMapRef:
+                name: marketplace-config
+            - secretRef:
+                name: marketplace-secret
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi

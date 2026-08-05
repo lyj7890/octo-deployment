@@ -89,6 +89,13 @@ spec:
                   name: {{ include "octo.secretName" . }}
                   key: DOCS_DB_PASSWORD
             {{- end }}
+            {{- if .Values.marketplace.enabled }}
+            - name: OCTO_MARKETPLACE_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "octo.secretName" . }}
+                  key: MARKETPLACE_DB_PASSWORD
+            {{- end }}
           readinessProbe:
             exec:
               command:

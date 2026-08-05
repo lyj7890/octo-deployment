@@ -1,0 +1,29 @@
+# ConfigMap for octo-marketplace configuration
+# Non-sensitive environment variables for the marketplace service.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: marketplace-config
+  labels:
+    app: octo-marketplace
+data:
+  APP_ENV: "prod"
+  API_PORT: "8092"
+  AUTH_ENABLED: "true"
+  STORAGE_DRIVER: "oss"
+  OSS_REGION: "us-east-1"
+  OSS_PATH_STYLE: "true"
+  OSS_DOWNLOAD_SIGNED: "true"
+  MAX_UPLOAD_MB: "20"
+  # MySQL connection (password comes from Secret via MYSQL_DSN)
+  MYSQL_HOST: "mysql"
+  MYSQL_PORT: "3306"
+  MYSQL_USER: "marketplace"
+  MYSQL_DATABASE: "octo_marketplace"
+  # Redis connection
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
+  # OCTO server for auth delegation
+  OCTO_API_URL: "http://octo-server:8090"
+  # MinIO config (secrets via Secret)
+  OSS_BUCKET: "marketplace"

@@ -387,6 +387,55 @@ kubectl exec -n <ns> deploy/octo-docs -- curl -s localhost:3000/healthz
 
 ---
 
+## 技能市场（可选）
+
+技能/机器人/MCP 市场服务是**可选**组件，**默认关闭**。当 `marketplace.enabled=false`（默认）时，chart 渲染**零**个 marketplace 资源。
+
+```yaml
+marketplace:
+  enabled: true        # 默认 false → 不渲染任何 marketplace 资源
+```
+
+### 启用检查清单
+
+在启用 `marketplace.enabled=true` 之前：
+
+1. **MySQL 数据库和用户必须存在。** 全新安装时，`init-extra-dbs.sh` 初始化脚本会自动创建。在**现有集群**上，需要手动创建：
+   ```sql
+   CREATE DATABASE IF NOT EXISTS octo_marketplace CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+   CREATE USER IF NOT EXISTS 'marketplace'@'%' IDENTIFIED BY '<MARKETPLACE_DB_PASSWORD>';
+   GRANT ALL PRIVILEGES ON octo_marketplace.* TO 'marketplace'@'%';
+   FLUSH PRIVILEGES;
+   ```
+2. **MinIO bucket 必须存在。** 全新安装时，`minio-bootstrap` init container 会创建 `marketplace`。在**现有集群**上，需要手动创建：
+   ```bash
+   mc mb octo/marketplace
+   ```
+3. **设置 marketplace 密钥**通过 `--set` 标志（先生成值，再传入）：
+   ```bash
+   helm upgrade octo ./helm/octo \
+     --set secrets.marketplaceDbPassword="$(openssl rand -hex 16)"
+   ```
+   
+   > **警告：** 不要在 YAML values 文件中写 `$(...)`  — Helm 不会执行 shell 命令。请先生成值，再复制粘贴，或如上所示使用 `--set`。
+
+### 限制
+
+- **必须使用 MinIO：** 云存储提供商（tencentCOS、aliOSS、s3、qiniu）不支持 marketplace。当 `marketplace.enabled=true` 且使用非 MinIO 存储时，chart 在渲染时报错。
+- **Redis 密码不支持：** octo-marketplace 镜像使用 `REDIS_URL` 但不支持密码认证。当 `marketplace.enabled=true` 和 `secrets.redisPassword` 同时设置时，chart 在渲染时报错。请使用无密码认证的 Redis 实例。
+
+### 验证就绪
+
+```bash
+# 检查 marketplace pod 是否运行
+kubectl get pods -n <ns> -l app.kubernetes.io/component=marketplace
+
+# 检查 REST API 健康
+kubectl exec -n <ns> deploy/octo-marketplace -- wget -qO- localhost:8092/healthz
+```
+
+---
+
 ## 卸载
 
 ```bash
