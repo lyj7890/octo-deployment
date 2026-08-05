@@ -72,15 +72,15 @@ spec:
             - name: API_PORT
               value: "8092"
             - name: AUTH_ENABLED
-              value: {{ .Values.marketplace.config.authEnabled | default true | quote }}
-            # MySQL DSN (built from components)
-            - name: MYSQL_DSN
-              value: "marketplace:$(MARKETPLACE_DB_PASSWORD)@tcp({{ include "octo.mysql.host" . }}:{{ include "octo.mysql.port" . }})/octo_marketplace?charset=utf8mb4&parseTime=true"
+              value: {{ .Values.marketplace.config.authEnabled | default "true" | quote }}
+            # MySQL connection - password must be defined before DSN references it
             - name: MARKETPLACE_DB_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ include "octo.secretName" . }}
                   key: MARKETPLACE_DB_PASSWORD
+            - name: MYSQL_DSN
+              value: "marketplace:$(MARKETPLACE_DB_PASSWORD)@tcp({{ include "octo.mysql.host" . }}:{{ include "octo.mysql.port" . }})/octo_marketplace?charset=utf8mb4&parseTime=true"
             # Redis URL
             - name: REDIS_URL
               value: "redis://{{ include "octo.redis.host" . }}:{{ include "octo.redis.port" . }}/0"

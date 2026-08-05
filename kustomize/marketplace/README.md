@@ -16,7 +16,7 @@ Before applying this kustomization:
 3. **MinIO**: The `marketplace` bucket must be created
 4. **OCTO Server**: Running at `octo-server:8090` (required for auth delegation)
 5. **Secret**: Create `marketplace-secret` from the example
-6. **Nginx**: Configure route for `/marketplace-api/` (see [Nginx Routing](#nginx-routing) below)
+6. **Nginx**: Configure route for `/market/api/` (see [Nginx Routing](#nginx-routing) below)
 
 ### Existing Cluster Database Setup
 
@@ -85,8 +85,9 @@ Add this location block to your nginx server configuration:
 
 ```nginx
 # Marketplace API — skill/bot/MCP catalog
-location /marketplace-api/ {
-    proxy_pass http://octo-marketplace:8092/;
+location /market/api/ {
+    rewrite ^/market/api/(.*) /$1 break;
+    proxy_pass http://octo-marketplace:8092;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -97,7 +98,7 @@ location /marketplace-api/ {
 ```
 
 Route:
-- `/marketplace-api/` → `octo-marketplace:8092` (REST API)
+- `/market/api/` → `octo-marketplace:8092` (REST API)
 
 ## Image Override
 

@@ -216,9 +216,9 @@ data:
         {{- end }}
 
         {{- if .Values.marketplace.enabled }}
-        location /marketplace-api/ {
+        location /market/api/ {
             limit_req zone=octo_api burst=20 nodelay;
-            rewrite ^/marketplace-api/(.*) /$1 break;
+            rewrite ^/market/api/(.*) /$1 break;
             proxy_pass         http://octo_marketplace_api;
             proxy_http_version 1.1;
             proxy_set_header   Host              $host;
@@ -229,8 +229,8 @@ data:
             client_max_body_size 20m;
         }
 
-        location = /marketplace-api {
-            return 301 /marketplace-api/;
+        location = /market/api {
+            return 301 /market/api/;
         }
         {{- end }}
 

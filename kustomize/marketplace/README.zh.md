@@ -16,7 +16,7 @@ OCTO 技能/机器人/MCP 市场服务。
 3. **MinIO**：`marketplace` 存储桶必须创建
 4. **OCTO Server**：运行在 `octo-server:8090`（身份认证委托）
 5. **Secret**：从示例文件创建 `marketplace-secret`
-6. **Nginx**：配置 `/marketplace-api/` 路由（见下方 [Nginx 路由](#nginx-路由)）
+6. **Nginx**：配置 `/market/api/` 路由（见下方 [Nginx 路由](#nginx-路由)）
 
 ### 现有集群数据库设置
 
@@ -84,8 +84,9 @@ openssl rand -hex 16  # 用于 MySQL 密码
 
 ```nginx
 # Marketplace API — 技能/机器人/MCP 市场
-location /marketplace-api/ {
-    proxy_pass http://octo-marketplace:8092/;
+location /market/api/ {
+    rewrite ^/market/api/(.*) /$1 break;
+    proxy_pass http://octo-marketplace:8092;
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -96,7 +97,7 @@ location /marketplace-api/ {
 ```
 
 路由说明：
-- `/marketplace-api/` → `octo-marketplace:8092`（REST API）
+- `/market/api/` → `octo-marketplace:8092`（REST API）
 
 ## 镜像版本
 
