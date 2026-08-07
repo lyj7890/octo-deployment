@@ -436,6 +436,52 @@ kubectl exec -n <ns> deploy/octo-marketplace -- wget -qO- localhost:8092/healthz
 
 ---
 
+## Fleet（可选）
+
+octo-fleet 是 OCTO Loop 平台的 Go 后端服务。它是**可选**组件，**默认关闭**。当 `fleet.enabled=false`（默认值）时，chart 不渲染任何 fleet 资源。
+
+```yaml
+fleet:
+  enabled: true        # 默认 false → 不渲染 fleet 资源
+  config:
+    postgres:
+      host: "postgres.example.com"  # fleet.enabled=true 时必须
+      port: 5432
+      database: "fleet"
+      user: "fleet"
+```
+
+启用 `fleet.enabled=true` 前：
+
+1. **必须存在 PostgreSQL 数据库。** Fleet 使用 PostgreSQL（非 MySQL）：
+   ```sql
+   CREATE DATABASE fleet;
+   CREATE USER fleet WITH PASSWORD '<FLEET_DB_PASSWORD>';
+   GRANT ALL PRIVILEGES ON DATABASE fleet TO fleet;
+   ```
+
+2. **通过 `--set` 设置 fleet secrets**：
+   ```bash
+   helm upgrade octo ./helm/octo \
+     --set fleet.enabled=true \
+     --set fleet.config.postgres.host="your-postgres-host" \
+     --set secrets.fleetDbPassword="<your-db-password>" \
+     --set secrets.fleetJwtSecret="$(openssl rand -hex 32)" \
+     --set secrets.fleetLoopCredentialHmacKey="$(openssl rand -hex 32)"
+   ```
+
+### 验证就绪
+
+```bash
+# 检查 fleet pod 是否运行
+kubectl get pods -n <ns> -l app.kubernetes.io/component=fleet
+
+# 检查 REST API 健康
+kubectl exec -n <ns> deploy/octo-fleet -- wget -qO- localhost:8080/healthz
+```
+
+---
+
 ## 卸载
 
 ```bash

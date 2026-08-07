@@ -145,6 +145,10 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- printf "%s-marketplace" (include "octo.fullname" .) | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
+{{- define "octo.fleet.fullname" -}}
+{{- printf "%s-fleet" (include "octo.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
 {{- define "octo.nginx.fullname" -}}
 {{- printf "%s-nginx" (include "octo.fullname" .) | trunc 63 | trimSuffix "-" }}
 {{- end }}

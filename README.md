@@ -178,6 +178,21 @@ OpenSearch is a separate, owner-gated step. See
 [`helm/octo/README.md`](./helm/octo/README.md) "Search (optional)", and
 [`kustomize/search/README.md`](./kustomize/search/README.md).
 
+## Optional fleet (OCTO Loop platform)
+
+octo-fleet is the Go backend for the OCTO Loop platform. It requires **PostgreSQL**
+(not MySQL) and is **default OFF on every entry point**.
+
+| Entry point | Opt-in | Default |
+|---|---|---|
+| Docker Compose | `COMPOSE_PROFILES=fleet docker compose up -d` | off |
+| Helm | `--set fleet.enabled=true --set fleet.config.postgres.host=<pg-host>` | off |
+| Kustomize | `kubectl apply -k kustomize/fleet` (standalone, not referenced by base/overlays) | off |
+
+Fleet uses PostgreSQL as its primary database (separate from the MySQL used by the
+core OCTO stack) and reuses the existing Redis instance. See
+[`kustomize/fleet/README.md`](./kustomize/fleet/README.md) for deployment details.
+
 ## Layout
 
 ```

@@ -156,6 +156,20 @@ OCTO 不内置 IM 引擎，通过 HTTP API + webhook gRPC 调用 [WuKongIM](http
 [`helm/octo/README.zh.md`](./helm/octo/README.zh.md) "搜索（可选）" 和
 [`kustomize/search/README.zh.md`](./kustomize/search/README.zh.md)。
 
+## 可选 Fleet（OCTO Loop 平台）
+
+octo-fleet 是 OCTO Loop 平台的 Go 后端服务。它需要 **PostgreSQL**（非 MySQL），
+且**默认关闭**。
+
+| 入口 | 启用方式 | 默认 |
+|---|---|---|
+| Docker Compose | `COMPOSE_PROFILES=fleet docker compose up -d` | 关 |
+| Helm | `--set fleet.enabled=true --set fleet.config.postgres.host=<pg-host>` | 关 |
+| Kustomize | `kubectl apply -k kustomize/fleet`（独立，不被 base/overlays 引用） | 关 |
+
+Fleet 使用 PostgreSQL 作为主数据库（与核心 OCTO 栈使用的 MySQL 分离），并复用现有的
+Redis 实例。详见 [`kustomize/fleet/README.zh.md`](./kustomize/fleet/README.zh.md)。
+
 ## 目录结构
 
 ```

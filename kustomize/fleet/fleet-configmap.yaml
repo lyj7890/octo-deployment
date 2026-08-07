@@ -1,0 +1,46 @@
+# octo-fleet ConfigMap — non-sensitive configuration
+#
+# All URL / hostname / port settings go here. Sensitive values (DATABASE_URL,
+# JWT_SECRET, LOOP_CREDENTIAL_HMAC_KEY) are in fleet-secret.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fleet-config
+  labels:
+    app: octo-fleet
+data:
+  # --- Server ---
+  PORT: "8080"
+  APP_ENV: "production"
+  LOG_LEVEL: "info"
+
+  # --- Redis (reuse existing instance) ---
+  # Point at the Redis Service already running in the target namespace.
+  # Using database index 1 to avoid collision with octo-server (index 0).
+  REDIS_URL: "redis://redis:6379/1"
+
+  # --- octo-server integration ---
+  # Fleet delegates authentication to octo-server.
+  OCTO_APP_SERVER_URL: "http://octo-server:8090"
+
+  # --- Application URLs (update for your environment) ---
+  # These must match the externally-reachable URLs for your deployment.
+  # The /fleet path prefix is typically used when nginx reverse-proxies fleet.
+  MULTICA_APP_URL: "http://localhost:28080/fleet"
+  MULTICA_PUBLIC_URL: "http://localhost:28080/fleet"
+  FRONTEND_ORIGIN: "http://localhost:28080"
+  CORS_ALLOWED_ORIGINS: "http://localhost:28080"
+  COOKIE_DOMAIN: "localhost"
+
+  # --- Optional features (leave empty to disable) ---
+  METRICS_ADDR: ""
+  ALLOWED_ORIGINS: ""
+  MULTICA_TRUSTED_PROXIES: ""
+  RATE_LIMIT_TRUSTED_PROXIES: ""
+
+  # --- Auth gates (adjust for your deployment) ---
+  ALLOW_SIGNUP: "true"
+  ALLOWED_EMAILS: ""
+  ALLOWED_EMAIL_DOMAINS: ""
+  DISABLE_WORKSPACE_CREATION: "false"
+  AUTH_TOKEN_TTL: ""

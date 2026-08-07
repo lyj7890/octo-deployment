@@ -1,0 +1,30 @@
+# Fleet backend (octo-fleet: Go backend for OCTO Loop platform)
+#
+# This kustomization is INTENTIONALLY NOT referenced by kustomize/base or any
+# overlay (dev/prod). Applying the default base/overlays deploys ZERO fleet
+# resources. An operator opts in explicitly and on a separate, owner-gated
+# action, e.g.:
+#
+#   kubectl apply -k kustomize/fleet -n <ns>
+#
+# Everything here is additive: it adds new workloads, services, and ConfigMaps
+# and does not modify any core OCTO resource. See README.md in this directory.
+#
+# Prerequisites:
+#   - PostgreSQL must be running with the `fleet` database created
+#   - Redis must be available (reuses the existing instance)
+#   - octo-server must be running (fleet delegates auth to it)
+#   - Create the fleet-secret from fleet-secret.example.yaml with real credentials
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - fleet-configmap.yaml
+  - fleet-deployment.yaml
+  # NOTE: fleet-secret.example.yaml is NOT included here intentionally.
+  # Operators must create their own Secret with real credentials before applying.
+  # See fleet-secret.example.yaml for the required keys and README.md for instructions.
+
+images:
+  - name: mininglamposs/octo-fleet
+    newTag: "latest"

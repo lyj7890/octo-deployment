@@ -128,6 +128,12 @@ secrets:
   # Marketplace credentials. Required only when marketplace.enabled=true.
   marketplaceDbPassword: ""   # Password for the 'marketplace' MySQL user
 
+  # Fleet credentials. Required only when fleet.enabled=true.
+  # Fleet uses PostgreSQL (NOT MySQL), so these are separate from MySQL passwords.
+  fleetDbPassword: ""         # Password for the 'fleet' PostgreSQL user
+  fleetJwtSecret: ""          # JWT signing secret (min 32 chars, openssl rand -hex 32)
+  fleetLoopCredentialHmacKey: ""  # Loop device-auth HMAC key (min 32 chars)
+
   # Inbound webhook HMAC secret (optional).
   webhookSecretKey: ""
 
@@ -549,6 +555,47 @@ marketplace:
     ossPublicEndpoint: ""
     # Maximum upload size in MB
     maxUploadMB: 20
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+# =============================================================================
+# Fleet (octo-fleet: Go backend for OCTO Loop platform) — OPT-IN.
+# Default OFF: with fleet.enabled=false NO fleet resources are rendered.
+# Fleet requires PostgreSQL (NOT MySQL) and delegates authentication to
+# octo-server.
+# =============================================================================
+fleet:
+  enabled: false
+  image:
+    repository: mininglamposs/octo-fleet
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  replicas: 1
+  config:
+    # Runtime environment
+    appEnv: production
+    logLevel: info
+    # External PostgreSQL connection info (DATABASE_URL is in secrets)
+    # PostgreSQL is REQUIRED for fleet — it does NOT use MySQL.
+    postgres:
+      host: ""              # Required when fleet.enabled=true
+      port: 5432
+      database: "fleet"
+      user: "fleet"
+    # Redis (reuses existing instance, different DB index)
+    redisURL: ""            # Defaults to redis://redis:6379/1
+    # Application URLs (update for your environment)
+    # These are used for CORS, cookies, and URL generation.
+    appURL: ""              # Defaults to http://{{ domain }}:{{ nginx.service.port }}/fleet
+    publicURL: ""           # Defaults to appURL
+    frontendOrigin: ""      # Defaults to http://{{ domain }}:{{ nginx.service.port }}
+    corsOrigins: ""         # Defaults to frontendOrigin
+    cookieDomain: ""        # Defaults to domain
   resources:
     requests:
       cpu: 100m

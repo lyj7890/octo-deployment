@@ -1,0 +1,92 @@
+# octo-fleet: Go backend for OCTO Loop platform
+#
+# Single listener at :8080 — REST API + health endpoint.
+#
+# Prerequisites:
+#   - PostgreSQL with `fleet` database created
+#   - Redis available (reuses existing instance)
+#   - octo-server running (fleet delegates auth to it)
+#   - fleet-secret created with required credentials
+apiVersion: v1
+kind: Service
+metadata:
+  name: octo-fleet
+  labels:
+    app: octo-fleet
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+  selector:
+    app: octo-fleet
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: octo-fleet
+  labels:
+    app: octo-fleet
+spec:
+  # Single writer: the entrypoint runs `migrate up` before serving. Migrations
+  # are serialized by a Postgres advisory lock, but Recreate + 1 replica keeps
+  # rollout simple and avoids old/new pods serving during a schema change.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: octo-fleet
+  template:
+    metadata:
+      labels:
+        app: octo-fleet
+    spec:
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.36
+          command: ['sh', '-c', 'until nc -z postgres 5432; do echo waiting for postgres; sleep 2; done']
+        - name: wait-for-redis
+          image: busybox:1.36
+          command: ['sh', '-c', 'until nc -z redis 6379; do echo waiting for redis; sleep 2; done']
+      containers:
+        - name: octo-fleet
+          image: mininglamposs/octo-fleet:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            # Non-secret configuration
+            - configMapRef:
+                name: fleet-config
+            # Sensitive values (DATABASE_URL, JWT_SECRET, etc.)
+            - secretRef:
+                name: fleet-secret
+          # Hold liveness/readiness off until migrations finish (~5 min budget).
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            failureThreshold: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi

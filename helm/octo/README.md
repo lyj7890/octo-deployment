@@ -436,6 +436,52 @@ kubectl exec -n <ns> deploy/octo-marketplace -- wget -qO- localhost:8092/healthz
 
 ---
 
+## Fleet (optional)
+
+octo-fleet is the Go backend for the OCTO Loop platform. It is an **opt-in** component, **default OFF**. With `fleet.enabled=false` (the default) the chart renders **zero** fleet resources.
+
+```yaml
+fleet:
+  enabled: true        # default false → no fleet resources rendered
+  config:
+    postgres:
+      host: "postgres.example.com"  # REQUIRED when fleet.enabled=true
+      port: 5432
+      database: "fleet"
+      user: "fleet"
+```
+
+Before enabling `fleet.enabled=true`:
+
+1. **PostgreSQL database must exist.** Fleet uses PostgreSQL (NOT MySQL):
+   ```sql
+   CREATE DATABASE fleet;
+   CREATE USER fleet WITH PASSWORD '<FLEET_DB_PASSWORD>';
+   GRANT ALL PRIVILEGES ON DATABASE fleet TO fleet;
+   ```
+
+2. **Set the fleet secrets** via `--set` flags:
+   ```bash
+   helm upgrade octo ./helm/octo \
+     --set fleet.enabled=true \
+     --set fleet.config.postgres.host="your-postgres-host" \
+     --set secrets.fleetDbPassword="<your-db-password>" \
+     --set secrets.fleetJwtSecret="$(openssl rand -hex 32)" \
+     --set secrets.fleetLoopCredentialHmacKey="$(openssl rand -hex 32)"
+   ```
+
+### Verify readiness
+
+```bash
+# Check fleet pod is running
+kubectl get pods -n <ns> -l app.kubernetes.io/component=fleet
+
+# Check REST API health
+kubectl exec -n <ns> deploy/octo-fleet -- wget -qO- localhost:8080/healthz
+```
+
+---
+
 ## Uninstall
 
 ```bash
