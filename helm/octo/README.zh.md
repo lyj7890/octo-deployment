@@ -458,6 +458,8 @@ fleet:
    CREATE DATABASE fleet;
    CREATE USER fleet WITH PASSWORD '<FLEET_DB_PASSWORD>';
    GRANT ALL PRIVILEGES ON DATABASE fleet TO fleet;
+   -- PostgreSQL 15+ 需要：授予 schema 权限
+   GRANT ALL ON SCHEMA public TO fleet;
    ```
 
 2. **通过 `--set` 设置 fleet secrets**：

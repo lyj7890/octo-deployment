@@ -123,6 +123,9 @@ spec:
               value: {{ $corsOrigins | quote }}
             - name: COOKIE_DOMAIN
               value: {{ $cookieDomain | quote }}
+            # Auth gates
+            - name: ALLOW_SIGNUP
+              value: {{ .Values.fleet.config.allowSignup | default false | quote }}
           # Hold liveness/readiness off until migrations finish (~5 min budget).
           startupProbe:
             httpGet:

@@ -597,6 +597,8 @@ fleet:
     frontendOrigin: ""      # Defaults to http://{{ domain }}:{{ nginx.service.port }}
     corsOrigins: ""         # Defaults to frontendOrigin
     cookieDomain: ""        # Defaults to domain
+    # Auth gates
+    allowSignup: false      # Allow new user registration (default: false for security)
   resources:
     requests:
       cpu: 100m

@@ -458,6 +458,8 @@ Before enabling `fleet.enabled=true`:
    CREATE DATABASE fleet;
    CREATE USER fleet WITH PASSWORD '<FLEET_DB_PASSWORD>';
    GRANT ALL PRIVILEGES ON DATABASE fleet TO fleet;
+   -- Required for PostgreSQL 15+: grant schema permissions
+   GRANT ALL ON SCHEMA public TO fleet;
    ```
 
 2. **Set the fleet secrets** via `--set` flags:
