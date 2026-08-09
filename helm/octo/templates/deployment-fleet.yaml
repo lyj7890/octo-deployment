@@ -3,6 +3,9 @@
 {{- if not .Values.fleet.config.postgres.host }}
 {{- fail "fleet.config.postgres.host must be set when fleet.enabled=true. Fleet requires PostgreSQL (not MySQL)." }}
 {{- end }}
+{{- if .Values.secrets.redisPassword }}
+{{- fail "fleet.enabled=true is incompatible with secrets.redisPassword. Configure fleet.config.redisURL with authentication instead." }}
+{{- end }}
 apiVersion: v1
 kind: Service
 metadata:
@@ -77,7 +80,7 @@ spec:
             {{- $pgPort := .Values.fleet.config.postgres.port | default 5432 }}
             {{- $pgDB := .Values.fleet.config.postgres.database | default "fleet" }}
             {{- $pgUser := .Values.fleet.config.postgres.user | default "fleet" }}
-            {{- $pgSSLMode := .Values.fleet.config.postgres.sslMode | default "require" }}
+            {{- $pgSSLMode := .Values.fleet.config.postgres.sslMode | default "disable" }}
             - name: FLEET_DB_PASSWORD
               valueFrom:
                 secretKeyRef:
