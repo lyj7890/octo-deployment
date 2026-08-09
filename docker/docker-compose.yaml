@@ -1857,6 +1857,7 @@ services:
     profiles: ["fleet"]
     environment:
       FLEET_DATABASE_URL: ${FLEET_DATABASE_URL:-}
+      FLEET_POSTGRES_PASSWORD: ${FLEET_POSTGRES_PASSWORD:-}
       FLEET_JWT_SECRET: ${FLEET_JWT_SECRET:-}
       FLEET_LOOP_CREDENTIAL_HMAC_KEY: ${FLEET_LOOP_CREDENTIAL_HMAC_KEY:-}
     entrypoint: ["/bin/sh", "-c"]
@@ -1887,7 +1888,23 @@ services:
               ;;
           esac
         }
-        check_required FLEET_DATABASE_URL
+        # Either FLEET_DATABASE_URL or FLEET_POSTGRES_PASSWORD must be set.
+        # FLEET_DATABASE_URL: explicit external PostgreSQL connection string.
+        # FLEET_POSTGRES_PASSWORD: used to build the fallback URL for bundled fleet-postgres.
+        if [ -z "$$FLEET_DATABASE_URL" ]; then
+          # Using bundled fleet-postgres — validate FLEET_POSTGRES_PASSWORD instead.
+          check_required FLEET_POSTGRES_PASSWORD
+          lc=$$(printf %s "$$FLEET_POSTGRES_PASSWORD" | tr 'A-Z' 'a-z')
+          case "$$lc" in
+            change_me_*|chg_me*)
+              echo "[fleet-preflight] FATAL: FLEET_POSTGRES_PASSWORD is still a CHANGE_ME / CHG_ME placeholder" >&2
+              exit 1
+              ;;
+          esac
+          echo "[fleet-preflight] Using bundled fleet-postgres with FLEET_POSTGRES_PASSWORD"
+        else
+          echo "[fleet-preflight] Using explicit FLEET_DATABASE_URL"
+        fi
         check_hex_secret FLEET_JWT_SECRET
         check_hex_secret FLEET_LOOP_CREDENTIAL_HMAC_KEY
         echo "[fleet-preflight] fleet settings look valid"

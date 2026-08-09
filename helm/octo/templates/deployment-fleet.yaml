@@ -71,17 +71,20 @@ spec:
             - name: LOG_LEVEL
               value: {{ .Values.fleet.config.logLevel | default "info" | quote }}
             # PostgreSQL connection (constructed from parts)
+            # FLEET_DB_PASSWORD must be defined BEFORE DATABASE_URL so K8s can
+            # expand $(FLEET_DB_PASSWORD) during variable substitution.
             {{- $pgHost := .Values.fleet.config.postgres.host }}
             {{- $pgPort := .Values.fleet.config.postgres.port | default 5432 }}
             {{- $pgDB := .Values.fleet.config.postgres.database | default "fleet" }}
             {{- $pgUser := .Values.fleet.config.postgres.user | default "fleet" }}
-            - name: DATABASE_URL
-              value: "postgres://{{ $pgUser }}:$(FLEET_DB_PASSWORD)@{{ $pgHost }}:{{ $pgPort }}/{{ $pgDB }}?sslmode=disable"
+            {{- $pgSSLMode := .Values.fleet.config.postgres.sslMode | default "require" }}
             - name: FLEET_DB_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ include "octo.secretName" . }}
                   key: FLEET_DB_PASSWORD
+            - name: DATABASE_URL
+              value: "postgres://{{ $pgUser }}:$(FLEET_DB_PASSWORD)@{{ $pgHost }}:{{ $pgPort }}/{{ $pgDB }}?sslmode={{ $pgSSLMode }}"
             # Redis connection
             {{- $redisURL := .Values.fleet.config.redisURL | default (printf "redis://%s:%s/1" (include "octo.redis.host" .) (include "octo.redis.port" .)) }}
             - name: REDIS_URL

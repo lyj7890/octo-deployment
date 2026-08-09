@@ -39,7 +39,7 @@ data:
   RATE_LIMIT_TRUSTED_PROXIES: ""
 
   # --- Auth gates (adjust for your deployment) ---
-  ALLOW_SIGNUP: "true"
+  ALLOW_SIGNUP: "false"
   ALLOWED_EMAILS: ""
   ALLOWED_EMAIL_DOMAINS: ""
   DISABLE_WORKSPACE_CREATION: "false"
