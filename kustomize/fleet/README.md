@@ -100,8 +100,8 @@ If migrating from the legacy octo-multica-backend service:
 | `APP_ENV` | `production` | Runtime environment |
 | `LOG_LEVEL` | `info` | Log verbosity (debug/info/warn/error) |
 | `REDIS_URL` | `redis://redis:6379/1` | Redis connection |
-| `OCTO_APP_SERVER_URL` | `http://octo-server:8090` | octo-server for auth |
-| `ALLOW_SIGNUP` | `true` | Allow new user registration |
+| `OCTO_APP_SERVER_URL` | `http://octo-server` | octo-server for auth |
+| `ALLOW_SIGNUP` | `false` | Allow new user registration |
 
 ## Health Check
 

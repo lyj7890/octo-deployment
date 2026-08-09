@@ -100,8 +100,8 @@ location /fleet/ {
 | `APP_ENV` | `production` | 运行环境 |
 | `LOG_LEVEL` | `info` | 日志级别（debug/info/warn/error） |
 | `REDIS_URL` | `redis://redis:6379/1` | Redis 连接 |
-| `OCTO_APP_SERVER_URL` | `http://octo-server:8090` | 用于认证的 octo-server |
-| `ALLOW_SIGNUP` | `true` | 允许新用户注册 |
+| `OCTO_APP_SERVER_URL` | `http://octo-server` | 用于认证的 octo-server |
+| `ALLOW_SIGNUP` | `false` | 允许新用户注册 |
 
 ## 健康检查
 

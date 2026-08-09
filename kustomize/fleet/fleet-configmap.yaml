@@ -21,7 +21,8 @@ data:
 
   # --- octo-server integration ---
   # Fleet delegates authentication to octo-server.
-  OCTO_APP_SERVER_URL: "http://octo-server:8090"
+  # Use port 80 (kustomize exposes octo-server on ClusterIP port 80).
+  OCTO_APP_SERVER_URL: "http://octo-server"
 
   # --- Application URLs (update for your environment) ---
   # These must match the externally-reachable URLs for your deployment.

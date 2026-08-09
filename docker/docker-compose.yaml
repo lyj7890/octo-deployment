@@ -1942,6 +1942,7 @@ services:
         condition: service_completed_successfully
       fleet-postgres:
         condition: service_healthy
+        required: false
       redis:
         condition: service_healthy
       octo-server:
@@ -1950,8 +1951,12 @@ services:
       TZ: ${TZ:-UTC}
       PORT: "8080"
       APP_ENV: ${FLEET_APP_ENV:-production}
-      # PostgreSQL connection (via fleet-postgres or external)
-      DATABASE_URL: ${FLEET_DATABASE_URL:-postgres://fleet:$${FLEET_POSTGRES_PASSWORD}@fleet-postgres:5432/fleet?sslmode=disable}
+      # PostgreSQL password — passed as separate env var so Compose can interpolate
+      # it into DATABASE_URL at runtime (avoids $${} escaping issues).
+      FLEET_POSTGRES_PASSWORD: ${FLEET_POSTGRES_PASSWORD:-}
+      # PostgreSQL connection: explicit URL or fallback to bundled fleet-postgres.
+      # The fallback uses the env var above (single $) for proper interpolation.
+      DATABASE_URL: ${FLEET_DATABASE_URL:-postgres://${FLEET_POSTGRES_USER:-fleet}:${FLEET_POSTGRES_PASSWORD}@fleet-postgres:5432/${FLEET_POSTGRES_DB:-fleet}?sslmode=disable}
       # Redis (reuse existing instance)
       REDIS_URL: ${FLEET_REDIS_URL:-redis://redis:6379/1}
       # Auth secrets

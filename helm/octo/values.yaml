@@ -587,7 +587,7 @@ fleet:
       port: 5432
       database: "fleet"
       user: "fleet"
-      sslMode: "require"    # PostgreSQL SSL mode: require (default), verify-ca, verify-full, disable
+      sslMode: "disable"    # PostgreSQL SSL mode: disable (default), require, verify-ca, verify-full
     # Redis (reuses existing instance, different DB index)
     redisURL: ""            # Defaults to redis://redis:6379/1
     # Application URLs (update for your environment)
