@@ -1914,7 +1914,7 @@ services:
   fleet-postgres:
     image: ${OCTO_FLEET_POSTGRES_IMAGE:-postgres:16-alpine}
     restart: unless-stopped
-    profiles: ["fleet"]
+    profiles: ["fleet-db"]
     environment:
       TZ: ${TZ:-UTC}
       POSTGRES_USER: ${FLEET_POSTGRES_USER:-fleet}

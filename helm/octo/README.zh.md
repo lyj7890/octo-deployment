@@ -455,11 +455,8 @@ fleet:
 
 1. **必须存在 PostgreSQL 数据库。** Fleet 使用 PostgreSQL（非 MySQL）：
    ```sql
-   CREATE DATABASE fleet;
    CREATE USER fleet WITH PASSWORD '<FLEET_DB_PASSWORD>';
-   GRANT ALL PRIVILEGES ON DATABASE fleet TO fleet;
-   -- PostgreSQL 15+ 需要：授予 schema 权限
-   GRANT ALL ON SCHEMA public TO fleet;
+   CREATE DATABASE fleet OWNER fleet;
    ```
 
 2. **通过 `--set` 设置 fleet secrets**：

@@ -14,11 +14,8 @@ octo-fleet 是驱动 OCTO Loop 平台的 Go 后端服务。它提供 REST API �
 1. 创建 PostgreSQL 数据库（如未创建）：
 
    ```sql
-   CREATE DATABASE fleet;
    CREATE USER fleet WITH PASSWORD '<your-password>';
-   GRANT ALL PRIVILEGES ON DATABASE fleet TO fleet;
-   -- PostgreSQL 15+ 需要：授予 schema 权限
-   GRANT ALL ON SCHEMA public TO fleet;
+   CREATE DATABASE fleet OWNER fleet;
    ```
 
 2. 创建 Secret：

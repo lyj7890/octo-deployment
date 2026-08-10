@@ -14,11 +14,8 @@ octo-fleet is the Go backend service that powers the OCTO Loop platform. It prov
 1. Create the PostgreSQL database (if not already done):
 
    ```sql
-   CREATE DATABASE fleet;
    CREATE USER fleet WITH PASSWORD '<your-password>';
-   GRANT ALL PRIVILEGES ON DATABASE fleet TO fleet;
-   -- Required for PostgreSQL 15+: grant schema permissions
-   GRANT ALL ON SCHEMA public TO fleet;
+   CREATE DATABASE fleet OWNER fleet;
    ```
 
 2. Create the secret:

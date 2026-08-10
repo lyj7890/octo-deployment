@@ -455,11 +455,8 @@ Before enabling `fleet.enabled=true`:
 
 1. **PostgreSQL database must exist.** Fleet uses PostgreSQL (NOT MySQL):
    ```sql
-   CREATE DATABASE fleet;
    CREATE USER fleet WITH PASSWORD '<FLEET_DB_PASSWORD>';
-   GRANT ALL PRIVILEGES ON DATABASE fleet TO fleet;
-   -- Required for PostgreSQL 15+: grant schema permissions
-   GRANT ALL ON SCHEMA public TO fleet;
+   CREATE DATABASE fleet OWNER fleet;
    ```
 
 2. **Set the fleet secrets** via `--set` flags:
