@@ -1,10 +1,28 @@
 {{- if .Values.fleet.enabled }}
-{{- /* Fleet requires PostgreSQL (NOT MySQL) configuration */ -}}
-{{- if not .Values.fleet.config.postgres.host }}
-{{- fail "fleet.config.postgres.host must be set when fleet.enabled=true. Fleet requires PostgreSQL (not MySQL)." }}
+{{- /* Fleet requires PostgreSQL — either bundled or external */ -}}
+{{- if and (not .Values.fleet.postgres.enabled) (not .Values.fleet.config.postgres.host) }}
+{{- fail "fleet.config.postgres.host must be set when fleet.enabled=true and fleet.postgres.enabled=false. Either enable bundled PostgreSQL (fleet.postgres.enabled=true) or provide external PostgreSQL host." }}
 {{- end }}
 {{- if .Values.secrets.redisPassword }}
 {{- fail "fleet.enabled=true is incompatible with secrets.redisPassword. Configure fleet.config.redisURL with authentication instead." }}
+{{- end }}
+{{- /* Compute PostgreSQL connection info based on bundled vs external */ -}}
+{{- $pgHost := "" }}
+{{- $pgPort := 5432 }}
+{{- $pgDB := "fleet" }}
+{{- $pgUser := "fleet" }}
+{{- $pgSSLMode := "disable" }}
+{{- if .Values.fleet.postgres.enabled }}
+  {{- $pgHost = include "octo.fleet.postgres.fullname" . }}
+  {{- $pgPort = .Values.fleet.postgres.service.port | default 5432 }}
+  {{- $pgDB = .Values.fleet.postgres.auth.database | default "fleet" }}
+  {{- $pgUser = .Values.fleet.postgres.auth.username | default "fleet" }}
+{{- else }}
+  {{- $pgHost = .Values.fleet.config.postgres.host }}
+  {{- $pgPort = .Values.fleet.config.postgres.port | default 5432 }}
+  {{- $pgDB = .Values.fleet.config.postgres.database | default "fleet" }}
+  {{- $pgUser = .Values.fleet.config.postgres.user | default "fleet" }}
+  {{- $pgSSLMode = .Values.fleet.config.postgres.sslMode | default "disable" }}
 {{- end }}
 apiVersion: v1
 kind: Service
@@ -53,7 +71,7 @@ spec:
       initContainers:
         - name: wait-for-postgres
           image: {{ include "octo.image" (dict "repo" .Values.busybox.image.repository "tag" .Values.busybox.image.tag "ctx" .) }}
-          command: ['sh', '-c', 'until nc -z {{ .Values.fleet.config.postgres.host }} {{ .Values.fleet.config.postgres.port | default 5432 }}; do echo waiting for postgres; sleep 2; done']
+          command: ['sh', '-c', 'until nc -z {{ $pgHost }} {{ $pgPort }}; do echo waiting for postgres; sleep 2; done']
         - name: wait-for-redis
           image: {{ include "octo.image" (dict "repo" .Values.busybox.image.repository "tag" .Values.busybox.image.tag "ctx" .) }}
           command: ['sh', '-c', 'until nc -z {{ include "octo.redis.host" . }} {{ include "octo.redis.port" . }}; do echo waiting for redis; sleep 2; done']
@@ -73,14 +91,9 @@ spec:
               value: {{ .Values.fleet.config.appEnv | default "production" | quote }}
             - name: LOG_LEVEL
               value: {{ .Values.fleet.config.logLevel | default "info" | quote }}
-            # PostgreSQL connection (constructed from parts)
+            # PostgreSQL connection
             # FLEET_DB_PASSWORD must be defined BEFORE DATABASE_URL so K8s can
             # expand $(FLEET_DB_PASSWORD) during variable substitution.
-            {{- $pgHost := .Values.fleet.config.postgres.host }}
-            {{- $pgPort := .Values.fleet.config.postgres.port | default 5432 }}
-            {{- $pgDB := .Values.fleet.config.postgres.database | default "fleet" }}
-            {{- $pgUser := .Values.fleet.config.postgres.user | default "fleet" }}
-            {{- $pgSSLMode := .Values.fleet.config.postgres.sslMode | default "disable" }}
             - name: FLEET_DB_PASSWORD
               valueFrom:
                 secretKeyRef:

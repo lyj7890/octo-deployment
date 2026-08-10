@@ -1,0 +1,99 @@
+{{- if and .Values.fleet.enabled .Values.fleet.postgres.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "octo.fleet.postgres.fullname" . }}
+  labels:
+    {{- include "octo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: fleet-postgres
+spec:
+  type: ClusterIP
+  ports:
+    - name: postgres
+      port: {{ .Values.fleet.postgres.service.port | default 5432 }}
+      targetPort: postgres
+  selector:
+    {{- include "octo.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: fleet-postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "octo.fleet.postgres.fullname" . }}
+  labels:
+    {{- include "octo.labels" . | nindent 4 }}
+    app.kubernetes.io/component: fleet-postgres
+spec:
+  serviceName: {{ include "octo.fleet.postgres.fullname" . }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "octo.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: fleet-postgres
+  template:
+    metadata:
+      annotations:
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+      labels:
+        {{- include "octo.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: fleet-postgres
+    spec:
+      {{- include "octo.imagePullSecrets" . | nindent 6 }}
+      containers:
+        - name: postgres
+          image: {{ include "octo.image" (dict "repo" .Values.fleet.postgres.image.repository "tag" .Values.fleet.postgres.image.tag "ctx" .) }}
+          imagePullPolicy: {{ .Values.fleet.postgres.image.pullPolicy }}
+          env:
+            - name: POSTGRES_USER
+              value: {{ .Values.fleet.postgres.auth.username | default "fleet" | quote }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "octo.secretName" . }}
+                  key: FLEET_DB_PASSWORD
+            - name: POSTGRES_DB
+              value: {{ .Values.fleet.postgres.auth.database | default "fleet" | quote }}
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - name: postgres
+              containerPort: 5432
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -U $POSTGRES_USER -d $POSTGRES_DB
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -U $POSTGRES_USER -d $POSTGRES_DB
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          {{- with .Values.fleet.postgres.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- if .Values.fleet.postgres.storage.storageClass }}
+        storageClassName: {{ .Values.fleet.postgres.storage.storageClass | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.fleet.postgres.storage.size | default "10Gi" }}
+{{- end }}

@@ -149,6 +149,10 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- printf "%s-fleet" (include "octo.fullname" .) | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
+{{- define "octo.fleet.postgres.fullname" -}}
+{{- printf "%s-fleet-postgres" (include "octo.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
 {{- define "octo.nginx.fullname" -}}
 {{- printf "%s-nginx" (include "octo.fullname" .) | trunc 63 | trimSuffix "-" }}
 {{- end }}

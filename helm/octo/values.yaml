@@ -576,14 +576,32 @@ fleet:
     tag: "latest"
     pullPolicy: IfNotPresent
   replicas: 1
+  # Bundled PostgreSQL for fleet (opt-in). When enabled, deploys a PostgreSQL
+  # StatefulSet alongside fleet. When disabled, fleet.config.postgres.host is
+  # required to point at an external PostgreSQL instance.
+  postgres:
+    enabled: false
+    image:
+      repository: postgres
+      tag: "16-alpine"
+      pullPolicy: IfNotPresent
+    auth:
+      username: "fleet"
+      database: "fleet"
+    service:
+      port: 5432
+    storage:
+      size: 10Gi
+      storageClass: ""
+    resources: {}
   config:
     # Runtime environment
     appEnv: production
     logLevel: info
-    # External PostgreSQL connection info (DATABASE_URL is in secrets)
-    # PostgreSQL is REQUIRED for fleet — it does NOT use MySQL.
+    # External PostgreSQL connection info (only used when fleet.postgres.enabled=false)
+    # When fleet.postgres.enabled=true, these are auto-configured from bundled PG.
     postgres:
-      host: ""              # Required when fleet.enabled=true
+      host: ""              # Required when fleet.postgres.enabled=false
       port: 5432
       database: "fleet"
       user: "fleet"

@@ -440,34 +440,62 @@ kubectl exec -n <ns> deploy/octo-marketplace -- wget -qO- localhost:8092/healthz
 
 octo-fleet 是 OCTO Loop 平台的 Go 后端服务。它是**可选**组件，**默认关闭**。当 `fleet.enabled=false`（默认值）时，chart 不渲染任何 fleet 资源。
 
+### 方式一：内置 PostgreSQL（推荐用于开发环境）
+
+使用 chart 内置的 PostgreSQL StatefulSet：
+
 ```yaml
 fleet:
-  enabled: true        # 默认 false → 不渲染 fleet 资源
+  enabled: true
+  postgres:
+    enabled: true     # 部署内置 PostgreSQL
+    storage:
+      size: 10Gi
+```
+
+```bash
+helm upgrade octo ./helm/octo \
+  --set fleet.enabled=true \
+  --set fleet.postgres.enabled=true \
+  --set secrets.fleetDbPassword="$(openssl rand -hex 16)" \
+  --set secrets.fleetJwtSecret="$(openssl rand -hex 32)" \
+  --set secrets.fleetLoopCredentialHmacKey="$(openssl rand -hex 32)"
+```
+
+### 方式二：外部 PostgreSQL（推荐用于生产环境）
+
+指向您自己的 PostgreSQL 实例：
+
+```yaml
+fleet:
+  enabled: true
+  postgres:
+    enabled: false    # 使用外部 PostgreSQL
   config:
     postgres:
-      host: "postgres.example.com"  # fleet.enabled=true 时必须
+      host: "postgres.example.com"  # fleet.postgres.enabled=false 时必须
       port: 5432
       database: "fleet"
       user: "fleet"
 ```
 
-启用 `fleet.enabled=true` 前：
+启用前，请创建 PostgreSQL 数据库：
 
-1. **必须存在 PostgreSQL 数据库。** Fleet 使用 PostgreSQL（非 MySQL）：
-   ```sql
-   CREATE USER fleet WITH PASSWORD '<FLEET_DB_PASSWORD>';
-   CREATE DATABASE fleet OWNER fleet;
-   ```
+```sql
+CREATE USER fleet WITH PASSWORD '<FLEET_DB_PASSWORD>';
+CREATE DATABASE fleet OWNER fleet;
+```
 
-2. **通过 `--set` 设置 fleet secrets**：
-   ```bash
-   helm upgrade octo ./helm/octo \
-     --set fleet.enabled=true \
-     --set fleet.config.postgres.host="your-postgres-host" \
-     --set secrets.fleetDbPassword="<your-db-password>" \
-     --set secrets.fleetJwtSecret="$(openssl rand -hex 32)" \
-     --set secrets.fleetLoopCredentialHmacKey="$(openssl rand -hex 32)"
-   ```
+然后安装：
+
+```bash
+helm upgrade octo ./helm/octo \
+  --set fleet.enabled=true \
+  --set fleet.config.postgres.host="your-postgres-host" \
+  --set secrets.fleetDbPassword="<your-db-password>" \
+  --set secrets.fleetJwtSecret="$(openssl rand -hex 32)" \
+  --set secrets.fleetLoopCredentialHmacKey="$(openssl rand -hex 32)"
+```
 
 ### 验证就绪
 

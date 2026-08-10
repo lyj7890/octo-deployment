@@ -440,34 +440,62 @@ kubectl exec -n <ns> deploy/octo-marketplace -- wget -qO- localhost:8092/healthz
 
 octo-fleet is the Go backend for the OCTO Loop platform. It is an **opt-in** component, **default OFF**. With `fleet.enabled=false` (the default) the chart renders **zero** fleet resources.
 
+### Option 1: Bundled PostgreSQL (recommended for development)
+
+Use the chart's built-in PostgreSQL StatefulSet:
+
 ```yaml
 fleet:
-  enabled: true        # default false → no fleet resources rendered
+  enabled: true
+  postgres:
+    enabled: true     # Deploy bundled PostgreSQL
+    storage:
+      size: 10Gi
+```
+
+```bash
+helm upgrade octo ./helm/octo \
+  --set fleet.enabled=true \
+  --set fleet.postgres.enabled=true \
+  --set secrets.fleetDbPassword="$(openssl rand -hex 16)" \
+  --set secrets.fleetJwtSecret="$(openssl rand -hex 32)" \
+  --set secrets.fleetLoopCredentialHmacKey="$(openssl rand -hex 32)"
+```
+
+### Option 2: External PostgreSQL (recommended for production)
+
+Point fleet at your own PostgreSQL instance:
+
+```yaml
+fleet:
+  enabled: true
+  postgres:
+    enabled: false    # Use external PostgreSQL
   config:
     postgres:
-      host: "postgres.example.com"  # REQUIRED when fleet.enabled=true
+      host: "postgres.example.com"  # REQUIRED when fleet.postgres.enabled=false
       port: 5432
       database: "fleet"
       user: "fleet"
 ```
 
-Before enabling `fleet.enabled=true`:
+Before enabling, create the PostgreSQL database:
 
-1. **PostgreSQL database must exist.** Fleet uses PostgreSQL (NOT MySQL):
-   ```sql
-   CREATE USER fleet WITH PASSWORD '<FLEET_DB_PASSWORD>';
-   CREATE DATABASE fleet OWNER fleet;
-   ```
+```sql
+CREATE USER fleet WITH PASSWORD '<FLEET_DB_PASSWORD>';
+CREATE DATABASE fleet OWNER fleet;
+```
 
-2. **Set the fleet secrets** via `--set` flags:
-   ```bash
-   helm upgrade octo ./helm/octo \
-     --set fleet.enabled=true \
-     --set fleet.config.postgres.host="your-postgres-host" \
-     --set secrets.fleetDbPassword="<your-db-password>" \
-     --set secrets.fleetJwtSecret="$(openssl rand -hex 32)" \
-     --set secrets.fleetLoopCredentialHmacKey="$(openssl rand -hex 32)"
-   ```
+Then install:
+
+```bash
+helm upgrade octo ./helm/octo \
+  --set fleet.enabled=true \
+  --set fleet.config.postgres.host="your-postgres-host" \
+  --set secrets.fleetDbPassword="<your-db-password>" \
+  --set secrets.fleetJwtSecret="$(openssl rand -hex 32)" \
+  --set secrets.fleetLoopCredentialHmacKey="$(openssl rand -hex 32)"
+```
 
 ### Verify readiness
 
