@@ -115,7 +115,8 @@ volumes:
   # from zero. Separate from search-dlq-spill (the live indexer's spill).
   search-backfill-state:
     name: ${COMPOSE_PROJECT_NAME:-octo}_search-backfill-state
-  # --- fleet profile (opt-in: COMPOSE_PROFILES=fleet) --------------------------
+  # --- fleet profile (opt-in: COMPOSE_PROFILES=fleet,fleet-db for bundled PG,
+  #     or COMPOSE_PROFILES=fleet + FLEET_DATABASE_URL for external PG) --------
   # octo-fleet requires PostgreSQL (not MySQL). These volumes are only attached
   # by the fleet-profile services below.
   fleet-postgres-data:
@@ -1841,7 +1842,9 @@ services:
   # octo-fleet is a Go backend service that powers the OCTO Loop platform.
   # It requires PostgreSQL (NOT MySQL) as its primary database.
   # Gated behind `profiles: ["fleet"]` — a vanilla `docker compose up -d` starts
-  # nothing. Opt in with `COMPOSE_PROFILES=fleet`.
+  # nothing. Opt in with:
+  #   - Bundled PostgreSQL:  COMPOSE_PROFILES=fleet,fleet-db
+  #   - External PostgreSQL: COMPOSE_PROFILES=fleet  (requires FLEET_DATABASE_URL)
   #
   # ISOLATION GUARANTEES:
   #   - No core service definition is touched.
@@ -1856,6 +1859,7 @@ services:
     restart: "no"
     profiles: ["fleet"]
     environment:
+      COMPOSE_PROFILES: ${COMPOSE_PROFILES:-}
       FLEET_DATABASE_URL: ${FLEET_DATABASE_URL:-}
       FLEET_POSTGRES_PASSWORD: ${FLEET_POSTGRES_PASSWORD:-}
       FLEET_JWT_SECRET: ${FLEET_JWT_SECRET:-}
@@ -1888,20 +1892,30 @@ services:
               ;;
           esac
         }
-        # Either FLEET_DATABASE_URL or FLEET_POSTGRES_PASSWORD must be set.
+        # Either FLEET_DATABASE_URL or bundled fleet-postgres (fleet-db profile) must be configured.
         # FLEET_DATABASE_URL: explicit external PostgreSQL connection string.
         # FLEET_POSTGRES_PASSWORD: used to build the fallback URL for bundled fleet-postgres.
         if [ -z "$$FLEET_DATABASE_URL" ]; then
-          # Using bundled fleet-postgres — validate FLEET_POSTGRES_PASSWORD instead.
-          check_required FLEET_POSTGRES_PASSWORD
-          lc=$$(printf %s "$$FLEET_POSTGRES_PASSWORD" | tr 'A-Z' 'a-z')
-          case "$$lc" in
-            change_me_*|chg_me*)
-              echo "[fleet-preflight] FATAL: FLEET_POSTGRES_PASSWORD is still a CHANGE_ME / CHG_ME placeholder" >&2
+          # Check if fleet-db profile is enabled (bundled PostgreSQL mode)
+          case ",$$COMPOSE_PROFILES," in
+            *,fleet-db,*)
+              # Using bundled fleet-postgres — validate FLEET_POSTGRES_PASSWORD.
+              check_required FLEET_POSTGRES_PASSWORD
+              lc=$$(printf %s "$$FLEET_POSTGRES_PASSWORD" | tr 'A-Z' 'a-z')
+              case "$$lc" in
+                change_me_*|chg_me*)
+                  echo "[fleet-preflight] FATAL: FLEET_POSTGRES_PASSWORD is still a CHANGE_ME / CHG_ME placeholder" >&2
+                  exit 1
+                  ;;
+              esac
+              echo "[fleet-preflight] Using bundled fleet-postgres with FLEET_POSTGRES_PASSWORD"
+              ;;
+            *)
+              echo "[fleet-preflight] FATAL: bundled PostgreSQL mode requires COMPOSE_PROFILES=fleet,fleet-db" >&2
+              echo "[fleet-preflight] Either add 'fleet-db' to COMPOSE_PROFILES, or set FLEET_DATABASE_URL for external PostgreSQL" >&2
               exit 1
               ;;
           esac
-          echo "[fleet-preflight] Using bundled fleet-postgres with FLEET_POSTGRES_PASSWORD"
         else
           echo "[fleet-preflight] Using explicit FLEET_DATABASE_URL"
         fi

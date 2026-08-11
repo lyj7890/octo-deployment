@@ -163,7 +163,8 @@ octo-fleet 是 OCTO Loop 平台的 Go 后端服务。它需要 **PostgreSQL**（
 
 | 入口 | 启用方式 | 默认 |
 |---|---|---|
-| Docker Compose | `COMPOSE_PROFILES=fleet docker compose up -d` | 关 |
+| Docker Compose (内置 PG) | `COMPOSE_PROFILES=fleet,fleet-db docker compose up -d` | 关 |
+| Docker Compose (外部 PG) | `COMPOSE_PROFILES=fleet` + 设置 `FLEET_DATABASE_URL` | 关 |
 | Helm | `--set fleet.enabled=true --set fleet.config.postgres.host=<pg-host>` | 关 |
 | Kustomize | `kubectl apply -k kustomize/fleet`（独立，不被 base/overlays 引用） | 关 |
 

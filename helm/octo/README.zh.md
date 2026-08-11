@@ -453,14 +453,43 @@ fleet:
       size: 10Gi
 ```
 
+**首次安装** — 生成并保存密钥：
 ```bash
-helm upgrade octo ./helm/octo \
+# 只生成一次，务必保存这些值
+FLEET_DB_PASSWORD=$(openssl rand -hex 16)
+FLEET_JWT_SECRET=$(openssl rand -hex 32)
+FLEET_HMAC_KEY=$(openssl rand -hex 32)
+
+# 保存这些值！后续升级时需要使用相同的值
+echo "FLEET_DB_PASSWORD=$FLEET_DB_PASSWORD"
+echo "FLEET_JWT_SECRET=$FLEET_JWT_SECRET"
+echo "FLEET_HMAC_KEY=$FLEET_HMAC_KEY"
+
+helm upgrade --install octo ./helm/octo \
   --set fleet.enabled=true \
   --set fleet.postgres.enabled=true \
-  --set secrets.fleetDbPassword="$(openssl rand -hex 16)" \
-  --set secrets.fleetJwtSecret="$(openssl rand -hex 32)" \
-  --set secrets.fleetLoopCredentialHmacKey="$(openssl rand -hex 32)"
+  --set secrets.fleetDbPassword="$FLEET_DB_PASSWORD" \
+  --set secrets.fleetJwtSecret="$FLEET_JWT_SECRET" \
+  --set secrets.fleetLoopCredentialHmacKey="$FLEET_HMAC_KEY"
 ```
+
+**后续升级** — 复用相同的密钥：
+```bash
+# 方式 A：传入之前保存的值
+helm upgrade octo ./helm/octo \
+  --set secrets.fleetDbPassword="$FLEET_DB_PASSWORD" \
+  --set secrets.fleetJwtSecret="$FLEET_JWT_SECRET" \
+  --set secrets.fleetLoopCredentialHmacKey="$FLEET_HMAC_KEY" \
+  ...
+
+# 方式 B：使用 --reuse-values（保留所有之前的值）
+helm upgrade octo ./helm/octo --reuse-values ...
+```
+
+> **警告：密码持久化**
+>
+> - `secrets.fleetDbPassword` 仅在 PostgreSQL **首次 `initdb`** 时生效。后续升级更改此值**不会**更新数据库密码 — Fleet 将无法连接。如需更改已有密码：`kubectl exec` 进入 postgres pod 执行 `ALTER ROLE fleet PASSWORD 'new-password';`
+> - `secrets.fleetLoopCredentialHmacKey` 用于加密存储的凭据。**切勿重新生成此密钥** — 否则之前加密的数据将永久无法解密。
 
 ### 方式二：外部 PostgreSQL（推荐用于生产环境）
 

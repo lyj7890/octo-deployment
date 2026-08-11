@@ -185,7 +185,8 @@ octo-fleet is the Go backend for the OCTO Loop platform. It requires **PostgreSQ
 
 | Entry point | Opt-in | Default |
 |---|---|---|
-| Docker Compose | `COMPOSE_PROFILES=fleet docker compose up -d` | off |
+| Docker Compose (bundled PG) | `COMPOSE_PROFILES=fleet,fleet-db docker compose up -d` | off |
+| Docker Compose (external PG) | `COMPOSE_PROFILES=fleet` + set `FLEET_DATABASE_URL` | off |
 | Helm | `--set fleet.enabled=true --set fleet.config.postgres.host=<pg-host>` | off |
 | Kustomize | `kubectl apply -k kustomize/fleet` (standalone, not referenced by base/overlays) | off |
 

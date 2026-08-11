@@ -3,8 +3,8 @@
 {{- if and (not .Values.fleet.postgres.enabled) (not .Values.fleet.config.postgres.host) }}
 {{- fail "fleet.config.postgres.host must be set when fleet.enabled=true and fleet.postgres.enabled=false. Either enable bundled PostgreSQL (fleet.postgres.enabled=true) or provide external PostgreSQL host." }}
 {{- end }}
-{{- if .Values.secrets.redisPassword }}
-{{- fail "fleet.enabled=true is incompatible with secrets.redisPassword. Configure fleet.config.redisURL with authentication instead." }}
+{{- if and .Values.secrets.redisPassword (not .Values.fleet.config.redisURL) }}
+{{- fail "fleet.enabled=true with secrets.redisPassword requires fleet.config.redisURL to be set. Configure fleet.config.redisURL with authentication (e.g. redis://:password@host:port/db)." }}
 {{- end }}
 {{- /* Compute PostgreSQL connection info based on bundled vs external */ -}}
 {{- $pgHost := "" }}
